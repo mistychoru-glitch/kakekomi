@@ -1,0 +1,143 @@
+:root {
+  color-scheme: light;
+  --bg: #faf7f2;
+  --panel: #ffffff;
+  --ink: #2b2620;
+  --muted: #7a7268;
+  --accent: #b5793c;
+  --accent-soft: #f3e3cf;
+  --bubble-user: #e9e2d8;
+  --bubble-assistant: #fff9f0;
+  --border: #e4dccb;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.app-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.6rem;
+}
+
+.app-header p {
+  margin: 0 0 20px;
+  color: var(--muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.chat-panel, .note-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 360px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+.msg {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.msg.user {
+  align-self: flex-end;
+  background: var(--bubble-user);
+}
+
+.msg.assistant {
+  align-self: flex-start;
+  background: var(--bubble-assistant);
+  border: 1px solid var(--border);
+}
+
+.composer {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.composer button {
+  border: none;
+  background: var(--accent);
+  color: white;
+  padding: 0 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.composer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.note-panel h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.notes-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.sticky {
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+.sticky .action {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.sticky .caveat {
+  margin: 0;
+  color: var(--muted);
+}

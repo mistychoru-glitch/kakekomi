@@ -1,0 +1,18 @@
+name = "kakekomi-worker"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# ANTHROPIC_API_KEY は secret として登録すること（コミットしない）:
+#   wrangler secret put ANTHROPIC_API_KEY
+[vars]
+ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+
+# `wrangler d1 create kakekomi-db` 実行後に発行される database_id を
+# 下の "REPLACE_WITH_D1_DATABASE_ID" に置き換えること。
+[[d1_databases]]
+binding = "DB"
+database_name = "kakekomi-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# フロントエンドは Cloudflare Pages 側で配信する想定のため、ここでは
+# ローカル動作確認用に簡易static配信のみ用意している（frontend/を参照）。

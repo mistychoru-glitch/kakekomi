@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kakekomi</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <header class="app-header">
+    <h1>Kakekomi</h1>
+    <p>お金のことを、一人で抱え込まなくていい場所</p>
+  </header>
+
+  <main class="layout">
+    <section class="chat-panel">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="composer" class="composer">
+        <textarea id="input" placeholder="今の状況を、思うままに書いてみてください" rows="2"></textarea>
+        <button type="submit">送る</button>
+      </form>
+    </section>
+
+    <aside class="note-panel">
+      <h2>まとめノート</h2>
+      <div id="notes" class="notes">
+        <p class="notes-empty">会話が進むと、ここに整理された内容が付箋のように表示されます。</p>
+      </div>
+    </aside>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
