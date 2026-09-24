@@ -111,12 +111,15 @@ export async function generateReply(
 ): Promise<string> {
   const body = {
     model: env.ANTHROPIC_MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: systemPrompt,
     messages: [
       ...history.map((t) => ({ role: t.role, content: t.content })),
       { role: "user" as const, content: latestMessage },
     ],
+    // 家賃相場・自治体の制度等、最新かつ具体的な情報が必要な場合にAI自身の判断で
+    // 使わせるWeb検索ツール（SKILL.md 6章）。使いすぎないよう上限を設ける。
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
   };
 
   const res = await fetch(API_URL, {
@@ -136,8 +139,74 @@ export async function generateReply(
   const data = (await res.json()) as {
     content: Array<{ type: string; text?: string }>;
   };
-  return data.content
+  const text = data.content
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
     .join("\n");
+  return stripMarkdown(text);
+}
+
+// チャットUIはMarkdownを解釈せずプレーンテキストとして表示するため、
+// 指示を守らずモデルが記法を混ぜてきた場合に備えて念のため除去する。
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*]\s+/gm, "・");
+}
+
+const SUMMARY_SYSTEM_PROMPT = `あなたは、相談者とAIカウンセラーとのこれまでの会話を、外部の専門家（弁護士・自立相談支援機関・福祉事務所・家族等）に共有するための要約に変換するアシスタントです。
+
+以下のルールに従ってください：
+- 相談者本人の一人称ではなく「相談者は」という三人称の客観的な文章にする
+- 箇条書きではなく、自然な文章で2〜4段落程度にまとめる
+- 会話に含まれる事実（状況・経緯・希望・すでに検討した選択肢等）を漏らさず、簡潔に整理する
+- 診断や断定はせず、会話で語られたことの範囲にとどめる
+- 感情表現も、状況理解に必要な範囲で客観的に触れてよい（過度に感傷的な言い回しは避ける）
+- Markdown記法は使わず、プレーンテキストのみで出力する`;
+
+export async function summarizeConsultation(
+  env: AnthropicEnv,
+  history: ChatTurn[]
+): Promise<string> {
+  const transcript = history
+    .map((t) => `${t.role === "user" ? "相談者" : "カウンセラー"}: ${t.content}`)
+    .join("\n\n");
+
+  const body = {
+    model: env.ANTHROPIC_MODEL,
+    max_tokens: 1024,
+    system: SUMMARY_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user" as const,
+        content: `以下の会話を要約してください。\n\n${transcript}`,
+      },
+    ],
+  };
+
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Anthropic summarize call failed: ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    content: Array<{ type: string; text?: string }>;
+  };
+  const text = data.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text ?? "")
+    .join("\n");
+  return stripMarkdown(text);
 }

@@ -2,8 +2,12 @@ name = "kakekomi-worker"
 main = "src/index.ts"
 compatibility_date = "2025-09-01"
 
-# ANTHROPIC_API_KEY は secret として登録すること（コミットしない）:
+# 以下は secret として登録すること（コミットしない）:
 #   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put DEV_BYPASS_KEY   ← 開発者本人の回数制限を外すための合言葉。
+#     好きな文字列を自分で決めてよい。設定後、ブラウザのコンソールで
+#     localStorage.setItem("kakekomi_dev_key", "設定した合言葉") を一度実行しておくと、
+#     そのブラウザは以後ずっと制限の対象外になる。
 [vars]
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 
@@ -12,7 +16,12 @@ ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 [[d1_databases]]
 binding = "DB"
 database_name = "kakekomi-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "940feff3-95aa-4ae5-97d4-f7873d491b0d"
+
+# APIの乱用（コスト暴走）を防ぐためのIPごとの回数制限に使う
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "c3a50a46e3fd4ee2a18e0ae588c91c29"
 
 # フロントエンドは Cloudflare Pages 側で配信する想定のため、ここでは
 # ローカル動作確認用に簡易static配信のみ用意している（frontend/を参照）。

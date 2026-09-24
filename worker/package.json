@@ -11,8 +11,12 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250906.0",
+    "@cloudflare/workers-types": "^5.20260907.1",
     "typescript": "^5.6.0",
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.129.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260907.1": true
   }
 }

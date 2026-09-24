@@ -35,7 +35,7 @@ export function mergeStatePatch(
     if (value === undefined || value === null) continue;
 
     if (COMMON_KEYS.has(key)) {
-      (next as Record<string, unknown>)[key] = value;
+      (next as unknown as Record<string, unknown>)[key] = value;
     } else if (key === "sub_category" && Array.isArray(value)) {
       const merged = new Set([...next.personal.sub_category, ...value]);
       next.personal.sub_category = Array.from(merged) as typeof next.personal.sub_category;
