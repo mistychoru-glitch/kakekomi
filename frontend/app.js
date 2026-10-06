@@ -121,11 +121,8 @@ function renderAccountUI() {
     accountArea.innerHTML = `<button type="button" id="login-open" class="link-btn">ログイン / 登録</button>`;
     return;
   }
-  const planLabel =
-    account.planStatus === "guest" ? "無料登録" : account.planStatus === "retain" ? "保持プラン" : "相談再開プラン";
   accountArea.innerHTML = `
     <span>${escapeHtml(account.displayName)}さん</span>
-    <span class="plan-badge">${planLabel}</span>
     <button type="button" id="logout-btn" class="link-btn">ログアウト</button>
   `;
 }
@@ -267,21 +264,74 @@ const authLoginId = document.getElementById("auth-login-id");
 const authDisplayName = document.getElementById("auth-display-name");
 const authDisplayNameField = document.getElementById("auth-display-name-field");
 const authPassword = document.getElementById("auth-password");
+const authPasswordConfirm = document.getElementById("auth-password-confirm");
+const authPasswordConfirmField = document.getElementById("auth-password-confirm-field");
+const authShowPassword = document.getElementById("auth-show-password");
 const authError = document.getElementById("auth-error");
 const authSubmit = document.getElementById("auth-submit");
 let authMode = "register";
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function passwordProblem(password) {
+  if (password.length < 8) return "パスワードは8文字以上にしてください。";
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return "パスワードは英字と数字の両方を含めてください。";
+  }
+  return "";
+}
+
+function setPasswordVisible(visible) {
+  const type = visible ? "text" : "password";
+  authPassword.type = type;
+  authPasswordConfirm.type = type;
+}
+
+authShowPassword.addEventListener("change", () => setPasswordVisible(authShowPassword.checked));
+
 function openAuthModal(mode) {
   authMode = mode;
+  const isRegister = mode === "register";
   document.querySelectorAll(".modal-tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.mode === mode);
   });
-  authSubmit.textContent = mode === "register" ? "登録する" : "ログインする";
-  authDisplayNameField.hidden = mode === "login";
-  authDisplayName.required = mode === "register";
+  authSubmit.textContent = isRegister ? "登録する" : "ログインする";
+  authDisplayNameField.hidden = !isRegister;
+  authDisplayName.required = isRegister;
+  document.getElementById("auth-email-note").hidden = !isRegister;
+  authPasswordConfirmField.hidden = !isRegister;
+  authPasswordConfirm.required = isRegister;
+  authPassword.autocomplete = isRegister ? "new-password" : "current-password";
   authError.hidden = true;
   authForm.reset();
+  setPasswordVisible(false);
   openModal("auth-modal");
+}
+
+function authErrorMessage(res, data) {
+  if (res.status === 429) {
+    return data.error === "registration_limit_reached"
+      ? "このネットワークからの登録数が上限に達しています。"
+      : "短時間に試行しすぎです。しばらく時間をおいてからもう一度お試しください。";
+  }
+  switch (data.error) {
+    case "login_id_taken":
+      return "そのメールアドレスはすでに登録されています。ログインをお試しください。";
+    case "email_invalid":
+      return "メールアドレスの形式で入力してください。";
+    case "display_name_invalid":
+      return "表示名は1〜50文字で入力してください。";
+    case "invalid_credentials":
+      return "メールアドレスまたはパスワードが正しくありません。";
+    case "password_too_short":
+      return "パスワードは8文字以上にしてください。";
+    case "password_too_weak":
+      return "パスワードは英字と数字の両方を含めてください。";
+    case "password_too_long":
+      return "パスワードは128文字以内にしてください。";
+    default:
+      return "エラーが発生しました。もう一度お試しください。";
+  }
 }
 
 document.querySelectorAll(".modal-tab").forEach((tab) => {
@@ -291,33 +341,37 @@ document.querySelectorAll(".modal-tab").forEach((tab) => {
 authForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   authError.hidden = true;
+  const isRegister = authMode === "register";
   const loginId = authLoginId.value.trim();
   const displayName = authDisplayName.value.trim();
   const password = authPassword.value;
-  const path = authMode === "register" ? "/api/register" : "/api/login";
-  const body =
-    authMode === "register"
-      ? { login_id: loginId, display_name: displayName, password }
-      : { login_id: loginId, password };
 
+  if (isRegister) {
+    const problem = !EMAIL_PATTERN.test(loginId)
+      ? "メールアドレスの形式で入力してください。"
+      : passwordProblem(password) || (password !== authPasswordConfirm.value ? "パスワードが一致しません。もう一度確認してください。" : "");
+    if (problem) {
+      authError.textContent = problem;
+      authError.hidden = false;
+      return;
+    }
+  }
+
+  const path = isRegister ? "/api/register" : "/api/login";
+  const body = isRegister
+    ? { login_id: loginId, display_name: displayName, password }
+    : { login_id: loginId, password };
+
+  authSubmit.disabled = true;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json", ...devHeaders() },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      authError.textContent =
-        data.error === "login_id_taken"
-          ? "そのログインIDはすでに使われています。"
-          : data.error === "login_id_invalid"
-          ? "ログインIDは半角英数字とアンダースコアで3〜20文字にしてください。"
-          : data.error === "invalid_credentials"
-          ? "ログインIDまたはパスワードが正しくありません。"
-          : data.error === "password_too_short"
-          ? "パスワードは8文字以上にしてください。"
-          : "エラーが発生しました。もう一度お試しください。";
+      authError.textContent = authErrorMessage(res, data);
       authError.hidden = false;
       return;
     }
@@ -325,21 +379,53 @@ authForm.addEventListener("submit", async (e) => {
       token: data.token,
       loginId: data.loginId,
       displayName: data.displayName,
-      planStatus: data.planStatus,
     });
     closeModal("auth-modal");
   } catch (err) {
     console.error(err);
-    authError.textContent = "通信エラーが発生しました。";
+    authError.textContent = "通信エラーが発生しました。ネットワークを確認してもう一度お試しください。";
     authError.hidden = false;
+  } finally {
+    authSubmit.disabled = false;
   }
 });
 
+async function logout() {
+  const current = account;
+  saveAccount(null);
+  if (!current) return;
+  try {
+    await fetch(`${API_BASE}/api/logout`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${current.token}`, ...devHeaders() },
+    });
+  } catch (e) {
+    console.warn("logout request failed", e);
+  }
+}
+
+// 保存済みのログイン状態が有効か確認する（期限切れ・サーバー側で失効済みなら解除）。
+// 通信エラーのときは判断できないので、ログイン状態は維持する。
+async function verifyAccount() {
+  if (!account) return;
+  try {
+    const res = await authedFetch("/api/me");
+    if (res.status === 401) {
+      saveAccount(null);
+      return;
+    }
+    if (res.ok) {
+      const data = await res.json();
+      saveAccount({ token: account.token, loginId: data.loginId, displayName: data.displayName });
+    }
+  } catch (e) {
+    console.warn("failed to verify account", e);
+  }
+}
+
 accountArea.addEventListener("click", (e) => {
   if (e.target.id === "login-open") openAuthModal("register");
-  if (e.target.id === "logout-btn") {
-    saveAccount(null);
-  }
+  if (e.target.id === "logout-btn") logout();
 });
 
 // ---- 相談内容の書き出し（Markdownファイルとしてダウンロード） ----
@@ -416,3 +502,4 @@ renderMessages();
 renderNotes();
 autoGrow();
 renderAccountUI();
+verifyAccount();

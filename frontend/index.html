@@ -53,14 +53,24 @@
     </div>
     <form id="auth-form">
       <label>
-        ログインID（半角英数字とアンダースコア、3〜20文字。他の人と重複できません）
-        <input id="auth-login-id" type="text" pattern="[a-zA-Z0-9_]{3,20}" maxlength="20" required autocomplete="username" />
+        メールアドレス（ログインIDとして使います）
+        <input id="auth-login-id" type="text" inputmode="email" maxlength="254" required autocomplete="username" autocapitalize="none" spellcheck="false" />
       </label>
+      <p class="modal-note" id="auth-email-note">このメールアドレスにメールが送られることはありません。</p>
       <label id="auth-display-name-field">
         表示名（チャット画面に表示される呼び名。他の人と重複してもかまいません）
         <input id="auth-display-name" type="text" maxlength="50" />
       </label>
-      <label>パスワード（8文字以上）<input id="auth-password" type="password" minlength="8" required autocomplete="current-password" /></label>
+      <label>パスワード（8文字以上、英字と数字の両方を含める）<input id="auth-password" type="password" maxlength="128" required autocomplete="current-password" /></label>
+      <label id="auth-password-confirm-field">
+        パスワード（確認のためもう一度）
+        <input id="auth-password-confirm" type="password" maxlength="128" autocomplete="new-password" />
+      </label>
+      <label class="modal-check">
+        <input id="auth-show-password" type="checkbox" />
+        パスワードを表示する
+      </label>
+      <p class="modal-note">パスワードを忘れた場合、再設定する方法はありません。忘れないようにご注意ください。</p>
       <p id="auth-error" class="modal-error" hidden></p>
       <div class="modal-actions">
         <button type="button" class="modal-cancel" data-close>キャンセル</button>

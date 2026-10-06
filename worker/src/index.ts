@@ -5,7 +5,15 @@ import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch } from "./state";
 import { createInitialState } from "./types";
 import type { ChatRequestBody, ChatResponseBody, ChatTurn } from "./types";
-import { createSession, createUser, getUserByToken, upgradePlan, verifyLogin } from "./db";
+import { timingSafeEqualStrings } from "./auth";
+import {
+  createSession,
+  createUser,
+  deleteSession,
+  ensureAdminUser,
+  getUserByToken,
+  verifyLogin,
+} from "./db";
 import { checkLifetimeCap, checkRateLimit } from "./rateLimit";
 
 export interface Env {
@@ -14,6 +22,8 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   ANTHROPIC_MODEL: string;
   DEV_BYPASS_KEY?: string;
+  ADMIN_LOGIN_ID?: string;
+  ADMIN_PASSWORD?: string;
 }
 
 function rateLimited(): Response {
@@ -107,16 +117,59 @@ async function handleSummarize(req: Request, env: Env): Promise<Response> {
   return json({ summary });
 }
 
-async function requireAuth(req: Request, env: Env) {
+function bearerToken(req: Request): string | null {
   const header = req.headers.get("authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  return header.startsWith("Bearer ") ? header.slice(7) : null;
+}
+
+async function requireAuth(req: Request, env: Env) {
+  const token = bearerToken(req);
   if (!token) return null;
   return getUserByToken(env.DB, token);
 }
 
-const LOGIN_ID_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_MAX = 254;
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 128;
+
+function passwordError(password: string): string | null {
+  if (password.length < PASSWORD_MIN) return "password_too_short";
+  if (password.length > PASSWORD_MAX) return "password_too_long";
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return "password_too_weak";
+  return null;
+}
+
+function adminLoginId(env: Env): string | null {
+  const id = env.ADMIN_LOGIN_ID?.trim().toLowerCase();
+  return id && env.ADMIN_PASSWORD ? id : null;
+}
 
 async function handleRegister(req: Request, env: Env): Promise<Response> {
+  const body = (await req.json()) as {
+    login_id?: string;
+    display_name?: string;
+    password?: string;
+  };
+  const loginId = (body.login_id ?? "").trim().toLowerCase();
+  const displayName = (body.display_name ?? "").trim();
+  const password = body.password ?? "";
+
+  if (loginId.length > EMAIL_MAX || !EMAIL_PATTERN.test(loginId)) {
+    return json({ error: "email_invalid" }, 400);
+  }
+  if (loginId === adminLoginId(env)) {
+    return json({ error: "login_id_taken" }, 409);
+  }
+  if (displayName.length < 1 || displayName.length > 50) {
+    return json({ error: "display_name_invalid" }, 400);
+  }
+  const pwError = passwordError(password);
+  if (pwError) {
+    return json({ error: pwError }, 400);
+  }
+
+  // 入力ミスで弾かれた試行は回数に数えない（形式チェックを通ったものだけを制限の対象にする）
   if (!(await checkRateLimit(env, req, "register", 5, 3600))) {
     return rateLimited();
   }
@@ -125,24 +178,6 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
       { error: "registration_limit_reached", message: "このネットワークからの登録数が上限に達しています。" },
       429
     );
-  }
-  const body = (await req.json()) as {
-    login_id?: string;
-    display_name?: string;
-    password?: string;
-  };
-  const loginId = (body.login_id ?? "").trim();
-  const displayName = (body.display_name ?? "").trim();
-  const password = body.password ?? "";
-
-  if (!LOGIN_ID_PATTERN.test(loginId)) {
-    return json({ error: "login_id_invalid" }, 400);
-  }
-  if (displayName.length < 1 || displayName.length > 50) {
-    return json({ error: "display_name_invalid" }, 400);
-  }
-  if (password.length < 8) {
-    return json({ error: "password_too_short" }, 400);
   }
 
   try {
@@ -167,10 +202,21 @@ async function handleLogin(req: Request, env: Env): Promise<Response> {
     return rateLimited();
   }
   const body = (await req.json()) as { login_id?: string; password?: string };
-  const loginId = (body.login_id ?? "").trim();
+  const loginId = (body.login_id ?? "").trim().toLowerCase();
   const password = body.password ?? "";
 
-  const user = await verifyLogin(env.DB, loginId, password);
+  if (loginId.length > EMAIL_MAX || password.length > PASSWORD_MAX) {
+    return json({ error: "invalid_credentials" }, 401);
+  }
+
+  // 開発者アカウント: ID・パスワードはシークレットで持ち、ソースコードには書かない
+  const adminId = adminLoginId(env);
+  const user =
+    adminId && loginId === adminId
+      ? timingSafeEqualStrings(password, env.ADMIN_PASSWORD ?? "")
+        ? await ensureAdminUser(env.DB, adminId)
+        : null
+      : await verifyLogin(env.DB, loginId, password);
   if (!user) {
     return json({ error: "invalid_credentials" }, 401);
   }
@@ -189,14 +235,10 @@ async function handleMe(req: Request, env: Env): Promise<Response> {
   return json({ loginId: user.loginId, displayName: user.displayName, planStatus: user.planStatus });
 }
 
-async function handleUpgrade(req: Request, env: Env): Promise<Response> {
-  const user = await requireAuth(req, env);
-  if (!user) return json({ error: "unauthorized" }, 401);
-  const body = (await req.json()) as { plan?: string };
-  const plan = body.plan === "active" ? "active" : "retain";
-  // 注意: 学校提出のMVPにつき実際の決済処理は行わず、プラン状態を直接切り替えるモック。
-  await upgradePlan(env.DB, user.id, plan);
-  return json({ planStatus: plan });
+async function handleLogout(req: Request, env: Env): Promise<Response> {
+  const token = bearerToken(req);
+  if (token) await deleteSession(env.DB, token);
+  return json({ ok: true });
 }
 
 export default {
@@ -223,8 +265,8 @@ export default {
       if (url.pathname === "/api/me" && req.method === "GET") {
         return await handleMe(req, env);
       }
-      if (url.pathname === "/api/account/upgrade" && req.method === "POST") {
-        return await handleUpgrade(req, env);
+      if (url.pathname === "/api/logout" && req.method === "POST") {
+        return await handleLogout(req, env);
       }
     } catch (err) {
       console.error(err);

@@ -94,14 +94,6 @@ body {
   font-size: 0.85rem;
 }
 
-.plan-badge {
-  font-size: 0.75rem;
-  background: var(--accent-soft);
-  color: var(--accent);
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
 .link-btn {
   border: none;
   background: none;
@@ -346,6 +338,24 @@ body {
   background: var(--accent);
   color: white;
   border-color: var(--accent);
+}
+
+.modal .modal-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.modal .modal-check input {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+}
+
+.modal .modal-note {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
 }
 
 .modal-error {

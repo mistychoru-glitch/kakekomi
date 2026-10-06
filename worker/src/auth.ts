@@ -50,6 +50,16 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return diff === 0;
 }
 
+export function timingSafeEqualStrings(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const x = enc.encode(a);
+  const y = enc.encode(b);
+  const len = Math.max(x.length, y.length);
+  let diff = x.length ^ y.length;
+  for (let i = 0; i < len; i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return diff === 0;
+}
+
 export function generateToken(): string {
   return crypto.randomUUID();
 }
