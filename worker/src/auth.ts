@@ -60,6 +60,24 @@ export function timingSafeEqualStrings(a: string, b: string): boolean {
   return diff === 0;
 }
 
+// 紛らわしい文字（0/O, 1/I）を除いた32文字。256 % 32 == 0 なので偏りなく選べる。
+const RECOVERY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const RECOVERY_LENGTH = 16;
+
+export function generateRecoveryCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(RECOVERY_LENGTH));
+  const chars = Array.from(bytes, (b) => RECOVERY_ALPHABET[b % RECOVERY_ALPHABET.length]);
+  return [0, 4, 8, 12].map((i) => chars.slice(i, i + 4).join("")).join("-");
+}
+
+// 入力ゆれ（小文字・ハイフン・空白）を吸収する。形式が違えば null。
+export function normalizeRecoveryCode(input: string): string | null {
+  const code = input.toUpperCase().replace(/[\s-]/g, "");
+  if (code.length !== RECOVERY_LENGTH) return null;
+  for (const ch of code) if (!RECOVERY_ALPHABET.includes(ch)) return null;
+  return code;
+}
+
 export function generateToken(): string {
   return crypto.randomUUID();
 }

@@ -59,6 +59,13 @@ function housingCandidates(state: StructuredState): CandidateAction[] {
       priority: 4,
     });
   }
+  out.push({
+    id: "housing_consult_jiritsu",
+    action: "お住まいの市区町村の「自立相談支援機関」に、家賃のことを相談する",
+    caveat:
+      "支援員が状況を聞いて、家賃を支える住居確保給付金など使える制度を一緒に探してくれます。制度には要件があるため、使えるかどうかは窓口で確認してください。",
+    priority: 5,
+  });
   return out;
 }
 
@@ -102,6 +109,13 @@ function debtCandidates(state: StructuredState): CandidateAction[] {
       priority: 3,
     });
   }
+  out.push({
+    id: "debt_consult_houterasu",
+    action: "法テラス（0570-078374）に電話して、借金について相談できる窓口を案内してもらう",
+    caveat:
+      "収入などの要件を満たせば、無料の法律相談や弁護士費用の立替を受けられることがあります。どの方法が合うかは、専門家に確認してから決めます。",
+    priority: 5,
+  });
   return out;
 }
 

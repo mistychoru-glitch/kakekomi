@@ -30,16 +30,31 @@
     <section class="chat-panel">
       <div id="messages" class="messages" aria-live="polite"></div>
       <form id="composer" class="composer">
-        <textarea id="input" placeholder="今の状況を、思うままに書いてみてください（Enterで送信、Shift+Enterで改行）" rows="3"></textarea>
+        <textarea id="input" placeholder="今の状況を、思うままに書いてみてください（Enterで送信、Shift+Enterで改行）" rows="3" maxlength="2000"></textarea>
         <button type="submit">送る</button>
       </form>
+      <p class="chat-footnote">
+        <span id="char-count" class="char-count" hidden></span>
+        AIによる情報整理であり、法律・税務などの専門的な助言ではありません。
+        <button type="button" id="open-terms" class="link-btn">ご利用にあたって</button>
+      </p>
     </section>
 
     <aside class="note-panel">
       <h2>まとめノート</h2>
+      <section id="situation" class="situation" hidden>
+        <h3>いまの状況</h3>
+        <dl id="situation-list" class="situation-list"></dl>
+        <ul id="situation-flags" class="situation-flags"></ul>
+      </section>
+      <h3 id="notes-heading" class="notes-heading" hidden>次の一歩</h3>
       <div id="notes" class="notes">
         <p class="notes-empty">会話が進むと、ここに整理された内容が付箋のように表示されます。</p>
       </div>
+      <details class="resources">
+        <summary>相談窓口の一覧</summary>
+        <div id="resources-list" class="resources-list"><p class="notes-empty">読み込み中…</p></div>
+      </details>
     </aside>
   </main>
 </div>
@@ -57,11 +72,15 @@
         <input id="auth-login-id" type="text" inputmode="email" maxlength="254" required autocomplete="username" autocapitalize="none" spellcheck="false" />
       </label>
       <p class="modal-note" id="auth-email-note">このメールアドレスにメールが送られることはありません。</p>
+      <label id="auth-recovery-field">
+        リカバリーコード（登録時に表示された16文字のコード）
+        <input id="auth-recovery-code" type="text" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" />
+      </label>
       <label id="auth-display-name-field">
         表示名（チャット画面に表示される呼び名。他の人と重複してもかまいません）
         <input id="auth-display-name" type="text" maxlength="50" />
       </label>
-      <label>パスワード（8文字以上、英字と数字の両方を含める）<input id="auth-password" type="password" maxlength="128" required autocomplete="current-password" /></label>
+      <label><span id="auth-password-label">パスワード（8文字以上、英字と数字の両方を含める）</span><input id="auth-password" type="password" maxlength="128" required autocomplete="current-password" /></label>
       <label id="auth-password-confirm-field">
         パスワード（確認のためもう一度）
         <input id="auth-password-confirm" type="password" maxlength="128" autocomplete="new-password" />
@@ -70,13 +89,51 @@
         <input id="auth-show-password" type="checkbox" />
         パスワードを表示する
       </label>
-      <p class="modal-note">パスワードを忘れた場合、再設定する方法はありません。忘れないようにご注意ください。</p>
+      <p class="modal-note" id="auth-recovery-note">登録が完了すると「リカバリーコード」が表示されます。パスワードを忘れたときに必要なので、必ず保管してください。</p>
+      <p class="modal-note"><button type="button" id="auth-forgot" class="link-btn">パスワードを忘れた方はこちら</button><button type="button" id="auth-back" class="link-btn">ログインに戻る</button></p>
       <p id="auth-error" class="modal-error" hidden></p>
       <div class="modal-actions">
         <button type="button" class="modal-cancel" data-close>キャンセル</button>
         <button type="submit" class="modal-primary" id="auth-submit">登録する</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- リカバリーコードの表示（控えたことを確認するまで閉じられない） -->
+<div id="recovery-modal" class="modal-overlay" data-static hidden>
+  <div class="modal">
+    <h3 id="recovery-title">リカバリーコードを保管してください</h3>
+    <p id="recovery-lead"></p>
+    <div id="recovery-code" class="recovery-code"></div>
+    <div class="recovery-actions">
+      <button type="button" class="modal-cancel" id="recovery-copy">コピー</button>
+      <button type="button" class="modal-cancel" id="recovery-download">ファイルに保存</button>
+    </div>
+    <p class="modal-note">このコードは今回しか表示されません。他の人に見られない場所に保管してください。</p>
+    <label class="modal-check">
+      <input id="recovery-saved" type="checkbox" />
+      リカバリーコードを控えました
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="modal-primary" id="recovery-close" disabled>閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ご利用にあたって（初回に表示。同意するまで閉じられない） -->
+<div id="terms-modal" class="modal-overlay" data-static hidden>
+  <div class="modal">
+    <h3>ご利用にあたって</h3>
+    <ul class="terms-list">
+      <li>Kakekomiは、お金の悩みを整理するためのAIです。<strong>法律・税務・医療などの専門的な助言ではなく</strong>、回答に誤りが含まれることがあります。制度や金額は、必ず自治体や専門家に確認してください。</li>
+      <li>入力した内容は、回答を作るために<strong>AI事業者（Anthropic社）のサービスへ送信</strong>されます。氏名・住所・口座番号など、個人を特定できる情報は入力しないでください。</li>
+      <li>相談内容はKakekomiのサーバーには<strong>保存されません</strong>。このブラウザの中にだけ残り、「新しい相談を始める」やブラウザのデータ削除で消えます。</li>
+      <li>命の危険を感じるほどつらいときは、<strong>よりそいホットライン 0120-279-338</strong>（24時間・無料・匿名）に電話してください。</li>
+    </ul>
+    <div class="modal-actions">
+      <button type="button" class="modal-primary" id="terms-accept">理解して始める</button>
+    </div>
   </div>
 </div>
 

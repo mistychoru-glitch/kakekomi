@@ -1,25 +1,63 @@
 import type { StructuredState } from "./types";
 
-const PERSONAL_KEYS = new Set([
-  "has_children",
-  "debt_count",
-  "notice_type_unknown",
-  "legal_proceeding_confirmed",
-  "welfare_rejected_due_to_capacity",
-  "rent_above_regional_cap_suspected",
-  "cannot_afford_moving_cost",
-  "collection_fear_strong",
-  "already_consulted_no_resolution",
-  "checked_credit_bureau_total_unclear",
-]);
+type FieldType = "boolean" | "integer" | "string";
 
-const BUSINESS_KEYS = new Set(["payroll_urgency", "existing_advisors"]);
+const PERSONAL_FIELDS: Record<string, FieldType> = {
+  has_children: "boolean",
+  debt_count: "integer",
+  notice_type_unknown: "boolean",
+  legal_proceeding_confirmed: "boolean",
+  welfare_rejected_due_to_capacity: "boolean",
+  rent_above_regional_cap_suspected: "boolean",
+  cannot_afford_moving_cost: "boolean",
+  collection_fear_strong: "boolean",
+  already_consulted_no_resolution: "boolean",
+  checked_credit_bureau_total_unclear: "boolean",
+  rent_amount: "string",
+  area: "string",
+  notice_received: "string",
+  monthly_income_estimate: "string",
+  income_type: "string",
+  monthly_repayment_total: "string",
+  family_composition: "string",
+};
 
-const COMMON_KEYS = new Set([
-  "category",
-  "urgency_level",
-  "psychological_state",
-]);
+const BUSINESS_FIELDS: Record<string, FieldType> = {
+  payroll_urgency: "boolean",
+  employee_count: "integer",
+  existing_advisors: "string",
+  cash_runway: "string",
+  critical_deadline: "string",
+  debt_types: "string",
+  revenue_trend: "string",
+  funding_prospects: "string",
+};
+
+const COMMON_ENUMS: Record<string, readonly string[]> = {
+  category: ["personal", "business", "unclear"],
+  urgency_level: ["crisis", "urgent", "steady", "unknown"],
+  psychological_state: ["panic", "anxious", "calm", "unknown"],
+};
+
+const SUB_CATEGORIES = ["debt", "housing", "income_loss", "tax_or_insurance_arrears", "other"];
+
+const MAX_TEXT = 80;
+
+// LLMの出力は信用せず、型・長さ・選択肢を確かめた値だけを採用する
+// （画面やプロンプトにそのまま戻る値なので、想定外の内容が入り込まないようにする）。
+function coerce(type: FieldType, value: unknown): boolean | number | string | undefined {
+  switch (type) {
+    case "boolean":
+      return typeof value === "boolean" ? value : undefined;
+    case "integer":
+      return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : undefined;
+    case "string": {
+      if (typeof value !== "string") return undefined;
+      const text = value.trim().slice(0, MAX_TEXT);
+      return text ? text : undefined;
+    }
+  }
+}
 
 /**
  * LLMの抽出結果（差分）を既存の構造化状態にマージする。
@@ -34,15 +72,22 @@ export function mergeStatePatch(
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined || value === null) continue;
 
-    if (COMMON_KEYS.has(key)) {
-      (next as unknown as Record<string, unknown>)[key] = value;
-    } else if (key === "sub_category" && Array.isArray(value)) {
-      const merged = new Set([...next.personal.sub_category, ...value]);
-      next.personal.sub_category = Array.from(merged) as typeof next.personal.sub_category;
-    } else if (PERSONAL_KEYS.has(key)) {
-      (next.personal as unknown as Record<string, unknown>)[key] = value;
-    } else if (BUSINESS_KEYS.has(key)) {
-      (next.business as unknown as Record<string, unknown>)[key] = value;
+    if (key in COMMON_ENUMS) {
+      if (typeof value === "string" && COMMON_ENUMS[key].includes(value)) {
+        (next as unknown as Record<string, unknown>)[key] = value;
+      }
+    } else if (key === "sub_category") {
+      if (Array.isArray(value)) {
+        const valid = value.filter((v) => typeof v === "string" && SUB_CATEGORIES.includes(v));
+        const merged = new Set([...next.personal.sub_category, ...valid]);
+        next.personal.sub_category = Array.from(merged) as typeof next.personal.sub_category;
+      }
+    } else if (key in PERSONAL_FIELDS) {
+      const v = coerce(PERSONAL_FIELDS[key], value);
+      if (v !== undefined) (next.personal as unknown as Record<string, unknown>)[key] = v;
+    } else if (key in BUSINESS_FIELDS) {
+      const v = coerce(BUSINESS_FIELDS[key], value);
+      if (v !== undefined) (next.business as unknown as Record<string, unknown>)[key] = v;
     }
   }
 

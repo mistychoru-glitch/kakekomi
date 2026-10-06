@@ -25,5 +25,7 @@ database_id = "940feff3-95aa-4ae5-97d4-f7873d491b0d"
 binding = "RATE_LIMIT"
 id = "c3a50a46e3fd4ee2a18e0ae588c91c29"
 
-# フロントエンドは Cloudflare Pages 側で配信する想定のため、ここでは
-# ローカル動作確認用に簡易static配信のみ用意している（frontend/を参照）。
+# 画面（HTML/JS/CSS）も同じWorkerから配信する（URLを1つにまとめ、CORSを不要にするため）。
+# /api/* 以外のパスはここのファイルが返り、該当ファイルが無いパスはWorkerに回る。
+[assets]
+directory = "../frontend"

@@ -4,17 +4,19 @@ import { selectCandidateActions } from "./rules";
 import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch } from "./state";
 import { createInitialState } from "./types";
-import type { ChatRequestBody, ChatResponseBody, ChatTurn } from "./types";
+import type { ChatRequestBody, ChatResponseBody, ChatTurn, StructuredState } from "./types";
 import { timingSafeEqualStrings } from "./auth";
+import { RESOURCES } from "./resources";
 import {
   createSession,
   createUser,
   deleteSession,
+  resetPasswordWithRecoveryCode,
   ensureAdminUser,
   getUserByToken,
   verifyLogin,
 } from "./db";
-import { checkLifetimeCap, checkRateLimit } from "./rateLimit";
+import { checkLifetimeCap, checkRateLimit, isLocked, recordFailure } from "./rateLimit";
 
 export interface Env {
   DB: D1Database;
@@ -33,33 +35,88 @@ function rateLimited(): Response {
   );
 }
 
-const CORS_HEADERS = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type, authorization, x-kakekomi-dev-key",
-};
+// 画面とAPIは同じWorkerから配信するため、本番では同一オリジンでありCORSは不要。
+// 他サイトのJavaScriptからAPIを使われないよう、許可するのは同一オリジンと、
+// Worker自体がローカルで動いているとき（開発中）のlocalhost/file:// だけにする。
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin");
+  if (!origin) return {};
+  const self = new URL(req.url);
+  const isLocalWorker = self.hostname === "localhost" || self.hostname === "127.0.0.1";
+  const allowed =
+    origin === self.origin ||
+    (isLocalWorker && (origin === "null" || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)));
+  if (!allowed) return {};
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type, authorization, x-kakekomi-dev-key",
+    vary: "origin",
+  };
+}
+
+function withCors(req: Request, res: Response): Response {
+  const extra = corsHeaders(req);
+  if (Object.keys(extra).length === 0) return res;
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(extra)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, headers });
+}
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json", ...CORS_HEADERS },
+    headers: { "content-type": "application/json" },
   });
 }
 
-async function handleChat(req: Request, env: Env): Promise<Response> {
-  if (!(await checkRateLimit(env, req, "chat", 30, 3600))) {
-    return rateLimited();
+const MESSAGE_MAX = 2000;
+const HISTORY_MAX_TURNS = 30;
+const HISTORY_ITEM_MAX = 4000;
+const STATE_MAX_JSON = 20000;
+
+// クライアントから届く履歴・状態は信用せず、形と大きさを整えてからAIに渡す
+// （不正な形式によるエラーや、巨大な入力によるコスト膨張を防ぐ）。
+function sanitizeHistory(raw: unknown, maxTurns = HISTORY_MAX_TURNS): ChatTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const turns: ChatTurn[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const { role, content } = item as { role?: unknown; content?: unknown };
+    if ((role !== "user" && role !== "assistant") || typeof content !== "string") continue;
+    if (!content.trim()) continue;
+    turns.push({ role, content: content.slice(0, HISTORY_ITEM_MAX) });
   }
+  const recent = turns.slice(-maxTurns);
+  while (recent.length > 0 && recent[0].role !== "user") recent.shift();
+  return recent;
+}
+
+function sanitizeState(raw: unknown): StructuredState {
+  const s = raw as Partial<StructuredState> | null | undefined;
+  const looksValid =
+    !!s &&
+    typeof s === "object" &&
+    !!s.personal &&
+    !!s.business &&
+    Array.isArray(s.presented_actions) &&
+    Array.isArray(s.already_consulted) &&
+    JSON.stringify(s).length <= STATE_MAX_JSON;
+  return looksValid ? (s as StructuredState) : createInitialState();
+}
+
+async function handleChat(req: Request, env: Env): Promise<Response> {
   const body = (await req.json()) as Partial<ChatRequestBody>;
-  const message = (body.message ?? "").trim();
-  const history = body.history ?? [];
-  const state = body.state ?? createInitialState();
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  const history = sanitizeHistory(body.history);
+  const state = sanitizeState(body.state);
 
   if (!message) {
     return json({ error: "message is required" }, 400);
   }
 
-  // 2章: 緊急性の無条件上書きレイヤー（最優先・キーワードベースで即判定）
+  // 2章: 緊急性の無条件上書きレイヤー（最優先・キーワードベースで即判定）。
+  // AIを呼ばない固定応答なので、回数制限や文字数制限よりも先に必ず判定する。
   if (detectCrisis(message)) {
     const response: ChatResponseBody = {
       reply: buildCrisisResponse(),
@@ -68,6 +125,13 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
       safetyTriggered: true,
     };
     return json(response);
+  }
+
+  if (message.length > MESSAGE_MAX) {
+    return json({ error: "message_too_long" }, 400);
+  }
+  if (!(await checkRateLimit(env, req, "chat", 30, 3600))) {
+    return rateLimited();
   }
 
   const anthropicEnv = {
@@ -104,8 +168,8 @@ async function handleSummarize(req: Request, env: Env): Promise<Response> {
   if (!(await checkRateLimit(env, req, "summarize", 10, 3600))) {
     return rateLimited();
   }
-  const body = (await req.json()) as { history?: ChatTurn[] };
-  const history = body.history ?? [];
+  const body = (await req.json()) as { history?: unknown };
+  const history = sanitizeHistory(body.history, HISTORY_MAX_TURNS * 2);
   if (history.length === 0) {
     return json({ error: "history_required" }, 400);
   }
@@ -188,6 +252,7 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
       loginId: user.loginId,
       displayName: user.displayName,
       planStatus: user.planStatus,
+      recoveryCode: user.recoveryCode,
     });
   } catch (err) {
     if (err instanceof Error && err.message === "login_id_taken") {
@@ -235,23 +300,63 @@ async function handleMe(req: Request, env: Env): Promise<Response> {
   return json({ loginId: user.loginId, displayName: user.displayName, planStatus: user.planStatus });
 }
 
+const RESET_FAIL_LIMIT = 8;
+const RESET_FAIL_WINDOW = 3600;
+
+async function handlePasswordReset(req: Request, env: Env): Promise<Response> {
+  if (!(await checkRateLimit(env, req, "reset", 10, 3600))) {
+    return rateLimited();
+  }
+  const body = (await req.json()) as {
+    login_id?: string;
+    recovery_code?: string;
+    new_password?: string;
+  };
+  const loginId = (body.login_id ?? "").trim().toLowerCase();
+  const recoveryCode = body.recovery_code ?? "";
+  const newPassword = body.new_password ?? "";
+
+  const pwError = passwordError(newPassword);
+  if (pwError) {
+    return json({ error: pwError }, 400);
+  }
+  if (loginId.length > EMAIL_MAX || recoveryCode.length > 64) {
+    return json({ error: "invalid_recovery" }, 401);
+  }
+
+  // 同じアカウントへの連続失敗はIPが変わっても止める（コードの総当たり対策）
+  const lockKey = `reset_fail:${loginId}`;
+  if (await isLocked(env, lockKey, RESET_FAIL_LIMIT)) {
+    return json({ error: "reset_locked" }, 429);
+  }
+
+  const newCode = await resetPasswordWithRecoveryCode(env.DB, loginId, recoveryCode, newPassword);
+  if (!newCode) {
+    await recordFailure(env, lockKey, RESET_FAIL_WINDOW);
+    return json({ error: "invalid_recovery" }, 401);
+  }
+  return json({ ok: true, recoveryCode: newCode });
+}
+
 async function handleLogout(req: Request, env: Env): Promise<Response> {
   const token = bearerToken(req);
   if (token) await deleteSession(env.DB, token);
   return json({ ok: true });
 }
 
-export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+async function route(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
     if (req.method === "OPTIONS") {
-      return new Response(null, { headers: CORS_HEADERS });
+      return new Response(null, { status: 204 });
     }
 
     try {
       if (url.pathname === "/api/chat" && req.method === "POST") {
         return await handleChat(req, env);
+      }
+      if (url.pathname === "/api/resources" && req.method === "GET") {
+        return json({ resources: RESOURCES });
       }
       if (url.pathname === "/api/summarize" && req.method === "POST") {
         return await handleSummarize(req, env);
@@ -265,6 +370,9 @@ export default {
       if (url.pathname === "/api/me" && req.method === "GET") {
         return await handleMe(req, env);
       }
+      if (url.pathname === "/api/password-reset" && req.method === "POST") {
+        return await handlePasswordReset(req, env);
+      }
       if (url.pathname === "/api/logout" && req.method === "POST") {
         return await handleLogout(req, env);
       }
@@ -274,5 +382,10 @@ export default {
     }
 
     return json({ error: "not_found" }, 404);
+}
+
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    return withCors(req, await route(req, env));
   },
 };

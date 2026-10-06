@@ -70,3 +70,22 @@ export async function checkLifetimeCap(
   await env.RATE_LIMIT.put(key, String(count + 1));
   return true;
 }
+
+/**
+ * アカウント単位の失敗回数ロック（IPを変えて試す総当たりを防ぐ）。
+ * 失敗した分だけ recordFailure で数え、isLocked が true の間は照合自体をしない。
+ */
+export async function isLocked(env: RateLimitEnv, key: string, limit: number): Promise<boolean> {
+  const current = await env.RATE_LIMIT.get(key);
+  return (current ? parseInt(current, 10) : 0) >= limit;
+}
+
+export async function recordFailure(
+  env: RateLimitEnv,
+  key: string,
+  windowSeconds: number
+): Promise<void> {
+  const current = await env.RATE_LIMIT.get(key);
+  const count = (current ? parseInt(current, 10) : 0) + 1;
+  await env.RATE_LIMIT.put(key, String(count), { expirationTtl: windowSeconds });
+}

@@ -1,4 +1,11 @@
-import { generateId, generateToken, hashPassword, verifyPassword } from "./auth";
+import {
+  generateId,
+  generateRecoveryCode,
+  generateToken,
+  hashPassword,
+  normalizeRecoveryCode,
+  verifyPassword,
+} from "./auth";
 
 export interface UserRow {
   id: string;
@@ -21,7 +28,7 @@ export async function createUser(
   loginId: string,
   displayName: string,
   password: string
-): Promise<AuthedUser> {
+): Promise<AuthedUser & { recoveryCode: string }> {
   const existing = await db
     .prepare("SELECT id FROM users WHERE login_id = ?")
     .bind(loginId)
@@ -32,16 +39,49 @@ export async function createUser(
 
   const id = generateId();
   const passwordHash = await hashPassword(password);
+  const recoveryCode = generateRecoveryCode();
+  const recoveryHash = await hashPassword(normalizeRecoveryCode(recoveryCode) ?? recoveryCode);
   const createdAt = new Date().toISOString();
 
   await db
     .prepare(
-      "INSERT INTO users (id, login_id, display_name, password_hash, plan_status, created_at) VALUES (?, ?, ?, ?, 'guest', ?)"
+      "INSERT INTO users (id, login_id, display_name, password_hash, recovery_hash, plan_status, created_at) VALUES (?, ?, ?, ?, ?, 'guest', ?)"
     )
-    .bind(id, loginId, displayName, passwordHash, createdAt)
+    .bind(id, loginId, displayName, passwordHash, recoveryHash, createdAt)
     .run();
 
-  return { id, loginId, displayName, planStatus: "guest" };
+  return { id, loginId, displayName, planStatus: "guest", recoveryCode };
+}
+
+// リカバリーコードで本人確認してパスワードを再設定する。
+// 成功したら全セッションを失効させ、使用済みのコードに代わる新しいコードを返す。
+// 照合に失敗（ID不明・コード未発行・コード不一致）した場合は null。
+export async function resetPasswordWithRecoveryCode(
+  db: D1Database,
+  loginId: string,
+  recoveryCode: string,
+  newPassword: string
+): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT id, recovery_hash FROM users WHERE login_id = ?")
+    .bind(loginId)
+    .first<{ id: string; recovery_hash: string | null }>();
+  if (!row || !row.recovery_hash) return null;
+
+  const normalized = normalizeRecoveryCode(recoveryCode);
+  if (!normalized || !(await verifyPassword(normalized, row.recovery_hash))) return null;
+
+  const newCode = generateRecoveryCode();
+  const [passwordHash, recoveryHash] = await Promise.all([
+    hashPassword(newPassword),
+    hashPassword(normalizeRecoveryCode(newCode) ?? newCode),
+  ]);
+  await db
+    .prepare("UPDATE users SET password_hash = ?, recovery_hash = ? WHERE id = ?")
+    .bind(passwordHash, recoveryHash, row.id)
+    .run();
+  await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(row.id).run();
+  return newCode;
 }
 
 // 開発者アカウント用。パスワードの照合はシークレットで行うため、DBにはログインに使えない

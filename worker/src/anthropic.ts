@@ -51,6 +51,23 @@ const STATE_EXTRACTION_TOOL = {
       checked_credit_bureau_total_unclear: { type: "boolean" },
       payroll_urgency: { type: "boolean" },
       existing_advisors: { type: "string" },
+      // 「状況の整理」カードに出す項目。相談者の発言どおりの表現で、短く（40文字以内）。
+      rent_amount: { type: "string", description: "家賃の金額（例: 月20万円）" },
+      area: { type: "string", description: "住んでいる/検討している地域（例: 西新宿）" },
+      notice_received: {
+        type: "string",
+        description: "届いた督促・通知と期限（例: 大家からの督促状、今月末まで）",
+      },
+      monthly_income_estimate: { type: "string", description: "月の収入（例: 手取り25万円）" },
+      income_type: { type: "string", description: "収入の形態（例: 会社員、フリーランス）" },
+      monthly_repayment_total: { type: "string", description: "月の返済額の合計" },
+      family_composition: { type: "string", description: "家族構成（例: 一人暮らし、子ども2人）" },
+      cash_runway: { type: "string", description: "事業の資金がいつまで持つか" },
+      critical_deadline: { type: "string", description: "事業の差し迫った期限（給与支払日など）" },
+      debt_types: { type: "string", description: "事業の借入の種類" },
+      revenue_trend: { type: "string", description: "売上の傾向" },
+      funding_prospects: { type: "string", description: "資金調達の見込み" },
+      employee_count: { type: "integer", description: "従業員数" },
     },
   },
 };
@@ -142,7 +159,7 @@ export async function generateReply(
   const text = data.content
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
-    .join("\n");
+    .join("");
   return stripMarkdown(text);
 }
 
@@ -207,6 +224,6 @@ export async function summarizeConsultation(
   const text = data.content
     .filter((c) => c.type === "text")
     .map((c) => c.text ?? "")
-    .join("\n");
+    .join("");
   return stripMarkdown(text);
 }
