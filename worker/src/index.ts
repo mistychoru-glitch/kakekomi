@@ -16,16 +16,36 @@ import {
   getUserByToken,
   verifyLogin,
 } from "./db";
-import { checkLifetimeCap, checkRateLimit, isLocked, recordFailure } from "./rateLimit";
+import {
+  checkDailyBudget,
+  checkLifetimeCap,
+  checkRateLimit,
+  isLocked,
+  recordFailure,
+} from "./rateLimit";
 
 export interface Env {
   DB: D1Database;
-  RATE_LIMIT: KVNamespace;
   ANTHROPIC_API_KEY: string;
   ANTHROPIC_MODEL: string;
   DEV_BYPASS_KEY?: string;
+  DAILY_AI_LIMIT?: string;
   ADMIN_LOGIN_ID?: string;
   ADMIN_PASSWORD?: string;
+}
+
+const DEFAULT_DAILY_AI_LIMIT = 300;
+
+function dailyLimit(env: Env): number {
+  const n = Number(env.DAILY_AI_LIMIT);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_DAILY_AI_LIMIT;
+}
+
+function dailyLimited(): Response {
+  return json(
+    { error: "daily_limit", message: "本日のAI利用が上限に達しました。明日またお試しください。" },
+    503
+  );
 }
 
 function rateLimited(): Response {
@@ -133,6 +153,9 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   if (!(await checkRateLimit(env, req, "chat", 30, 3600))) {
     return rateLimited();
   }
+  if (!(await checkDailyBudget(env, req, dailyLimit(env)))) {
+    return dailyLimited();
+  }
 
   const anthropicEnv = {
     ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
@@ -167,6 +190,9 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
 async function handleSummarize(req: Request, env: Env): Promise<Response> {
   if (!(await checkRateLimit(env, req, "summarize", 10, 3600))) {
     return rateLimited();
+  }
+  if (!(await checkDailyBudget(env, req, dailyLimit(env)))) {
+    return dailyLimited();
   }
   const body = (await req.json()) as { history?: unknown };
   const history = sanitizeHistory(body.history, HISTORY_MAX_TURNS * 2);

@@ -12,6 +12,8 @@ compatibility_date = "2025-09-01"
 #     そのブラウザは以後ずっと制限の対象外になる。
 [vars]
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+# 全ユーザー合計の、1日あたりのAI利用回数の上限（料金の最終的な歯止め）。
+DAILY_AI_LIMIT = "300"
 
 # `wrangler d1 create kakekomi-db` 実行後に発行される database_id を
 # 下の "REPLACE_WITH_D1_DATABASE_ID" に置き換えること。
@@ -19,11 +21,6 @@ ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 binding = "DB"
 database_name = "kakekomi-db"
 database_id = "940feff3-95aa-4ae5-97d4-f7873d491b0d"
-
-# APIの乱用（コスト暴走）を防ぐためのIPごとの回数制限に使う
-[[kv_namespaces]]
-binding = "RATE_LIMIT"
-id = "c3a50a46e3fd4ee2a18e0ae588c91c29"
 
 # 画面（HTML/JS/CSS）も同じWorkerから配信する（URLを1つにまとめ、CORSを不要にするため）。
 # /api/* 以外のパスはここのファイルが返り、該当ファイルが無いパスはWorkerに回る。

@@ -337,6 +337,9 @@ function mergeCandidates(existing, incoming) {
 }
 
 function chatErrorMessage(res, data) {
+  if (data && data.error === "daily_limit") {
+    return "本日のAI利用が上限に達しました。明日またお試しください。お急ぎの場合は、画面右の「相談窓口の一覧」からお近くの窓口にご相談ください。";
+  }
   if (res.status === 429) {
     return "短い時間にたくさん送信されたため、少し時間をおいてからもう一度お試しください。";
   }
