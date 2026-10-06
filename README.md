@@ -1,81 +1,122 @@
 # Kakekomi
 
-お金のことで一人で抱え込んでいる人に、送客ではなく「伴走」するAIエージェント。
-診断はせず、状況整理と優先順位付きの行動指針、そして安心して感情を吐き出せる場を
-提供する。G's ACADEMY卒業制作。
+お金のことで一人で抱え込んでいる人に、「送客」ではなく「伴走」するAIエージェント。
+診断や断定はせず、状況の整理と、優先順位をつけた次の一歩、そして安心して気持ちを
+吐き出せる場所を提供します。G's ACADEMY 卒業制作。
 
-設計の一次情報は Claude Code の `kakekomi-counselor` スキル（SKILL.md）。
-背景・意思決定の経緯は引き継ぎ資料（`Kakekomi_ClaudeCode引き継ぎ資料.md`）を参照。
+- **公開URL**: https://kakekomi-worker.misty-choru.workers.dev
+- 設計の詳細・仕様: [docs/要件定義書.md](docs/要件定義書.md)
+
+## 何ができるか
+
+| 機能 | 内容 |
+|---|---|
+| 相談チャット | 家賃・借金・事業の資金繰りなど、お金の悩みを会話で整理する。共感 → 今大事な1〜2点 → 次の一歩、の順で短く返す |
+| いまの状況カード | 会話から読み取れた内容（家賃・エリア・収入・家族・届いた通知と期限など）を自動で整理して表示 |
+| 次の一歩 | 状況に応じた行動指針を、デメリットや注意点つきで提示（ルールはコード側、言い回しだけAI） |
+| 相談窓口の一覧 | 法テラス・自立相談支援機関・金融庁・消費者ホットライン188・日本政策金融公庫などを「かけると何をしてくれるか」付きで案内。AIへの指示で、案内する番号をこの確認済みの一覧に限定している（厳密に防ぐ仕組みではないため、出力は目視で確認すること） |
+| 危険信号への対応 | 「死にたい」等の言い回しをコード側で検知し、AIを呼ばず固定の案内（よりそいホットライン等）を最優先で返す |
+| Web検索 | 家賃相場・エリア比較など最新の情報が必要なとき、AIが自分で検索して根拠を確認 |
+| 相談内容の書き出し | AIが要約したMarkdownファイルをダウンロード（サーバーには残さない） |
+| アカウント | メールアドレス＋パスワード。パスワードを忘れたときは、登録時に表示されるリカバリーコードで再設定 |
+
+## 設計の考え方
+
+1. **会話内容をサーバーに保存しない**。お金の悩みは機密性が高く、サーバー側で保管するリスクが大きいため。
+   会話・状況カードはブラウザの中（localStorage）にだけ残ります。サーバーが持つのはアカウント情報
+   （メール・パスワードのハッシュ等）だけです。残したい人は「書き出し」でファイルに保存します。
+2. **判断ロジックはコード、AIは言い回しだけ**。優先順位付け・危険信号の検知・窓口の番号は
+   コード側に持たせ、AIには言い換えと整理だけを任せます。
+3. **危険信号は無条件に最優先**。AIの判断に任せず、キーワード検知で即座に固定応答を返します
+   （回数制限・文字数制限よりも先に判定）。
+4. **AIの暴走・乱用に備える**。範囲を「お金の相談」に絞り、IPごとの回数制限、全体の1日あたり
+   利用上限、入力の長さ制限を入れています。
 
 ## 構成
 
-- `worker/` — Cloudflare Workers（TypeScript）。AIエージェントのコア（緊急性
-  チェック→構造化状態の更新→ルールエンジン→システムプロンプト組み立て→
-  Anthropic API呼び出し）と D1 まわりを担当
-- `frontend/` — Cloudflare Pages で配信する静的フロントエンド（チャットUI）
+```
+frontend/   画面（HTML / CSS / JavaScript。フレームワークなし）
+worker/     Cloudflare Workers（TypeScript）— APIと、画面の配信
+  src/
+    index.ts       ルーティング、各APIの処理
+    safety.ts      危険信号の検知と固定応答
+    rules.ts       優先順位付け（住居・借金・事業のルール）
+    prompt.ts      AIへの指示（システムプロンプト）の組み立て
+    anthropic.ts   Anthropic API 呼び出し（状況の抽出 / 返信 / 要約）
+    state.ts       AIが読み取った状況の検証とマージ
+    resources.ts   相談窓口の一覧（AIの案内と画面表示の唯一の情報源）
+    auth.ts        パスワード・リカバリーコードのハッシュ化
+    db.ts          D1（ユーザー・セッション）
+    rateLimit.ts   回数制限（D1に保存）
+  migrations/      D1のテーブル定義
+  test/            自動テスト
+```
 
-## 現状の実装スコープ（MVP・第一段階）
+技術: Cloudflare Workers（画面もWorkerから配信）/ D1 / Claude（Haiku 4.5）/ Anthropic の Web検索ツール
 
-- [x] Cloudflareプロジェクトの初期化（wrangler.toml, D1スキーマのひな形）
-- [x] AIエージェントのコア（個人/housing・個人/debt・事業簡易版のルールエンジン）
-- [x] 緊急性の無条件上書きレイヤー（キーワード検知＋システムプロンプト二重化）
-- [x] まとめノート機能（クライアント側で候補アクションから簡易描画）
-- [ ] ユーザー登録・ログイン
-- [ ] ノートの保存・取得（D1）
-- [ ] 管理者ダッシュボード
-- [ ] 匿名投稿ティーザー機能
-- [ ] 利用ティアのUIモック
+## ローカルで動かす
 
-匿名利用（ゲスト）時は、会話履歴・構造化状態をブラウザの localStorage のみに
-保持し、サーバー（D1）には一切書き込まない。
-
-## セットアップ
-
-### 1. Cloudflareリソースの作成
+必要なもの: Node.js 24 以上、Anthropic の APIキー
 
 ```bash
 cd worker
 npm install
-npx wrangler d1 create kakekomi-db
-```
-
-出力された `database_id` を `worker/wrangler.toml` の
-`REPLACE_WITH_D1_DATABASE_ID` に貼り付ける。
-
-```bash
 npm run db:migrate:local
 ```
 
-### 2. Anthropic APIキーの設定
-
-ローカル開発用（`worker/.dev.vars`、gitignore対象）:
+`worker/.dev.vars`（Git管理外）を作って、キーを書きます。
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+# 任意: 開発者アカウント（このIDとパスワードでログインできる）と、回数制限の免除用の合言葉
+ADMIN_LOGIN_ID=...
+ADMIN_PASSWORD=...
+DEV_BYPASS_KEY=...
 ```
 
-本番デプロイ用:
+```bash
+npm run dev     # http://localhost:8787 を開く
+npm test        # 自動テスト
+npm run typecheck
+```
+
+## デプロイ
+
+```bash
+cd worker
+npx wrangler login
+npm run deploy
+```
+
+初回のみ、秘密の設定を登録します（値は入力時に画面へ表示されません）。
 
 ```bash
 npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put ADMIN_LOGIN_ID
+npx wrangler secret put ADMIN_PASSWORD
 ```
 
-### 3. ローカル起動
+本番のDBにテーブルを作る場合は `npm run db:migrate:remote`。
 
-```bash
-cd worker
-npm run dev
-# 別ターミナルで frontend/index.html を任意の静的サーバーで開く
-```
+## 主な設定（`worker/wrangler.toml`）
 
-### 4. デプロイ
+| 項目 | 内容 |
+|---|---|
+| `ANTHROPIC_MODEL` | 使うモデル（既定: `claude-haiku-4-5-20251001`） |
+| `DAILY_AI_LIMIT` | 全ユーザー合計の、1日あたりのAI利用回数の上限（既定: 300）。料金の最終的な歯止め |
 
-```bash
-cd worker
-npm run deploy
-npm run db:migrate:remote
-```
+## 既知の制限
 
-`frontend/` は Cloudflare Pages に接続してデプロイする。`frontend/app.js` の
-`API_BASE`（`window.KAKEKOMI_API_BASE`）は、デプロイ後のWorkerのURLに合わせて
-設定すること。
+- 個人の借金・家賃と事業の資金繰りの一部だけが対象です。収入減、税・保険料の滞納などのルールは未実装です。
+- AIの回答には誤りが含まれることがあります（画面に免責を表示しています）。制度や金額は必ず窓口で確認してください。
+- メールを送る仕組みがないため、メールアドレスの実在確認と、メールでのパスワード再設定はできません
+  （リカバリーコードを失くすと再設定できません）。
+- 法的な適合性（弁護士法、個人情報保護法など）は未確認です。事業化の前に専門家への確認が必要です。
+- 課金（トークン数ベースの利用制限）は未実装です。
+
+## 今後の展開
+
+- トークン数による利用制限と課金（ログインに意味を持たせる）
+- 自治体の窓口・制度データの整備と、収入減・税の滞納などのルール拡充
+- 相談窓口（自治体・社協・士業・商工会議所）での事前整理ツールとしての導入
+- メールでのパスワード再設定、SSO
