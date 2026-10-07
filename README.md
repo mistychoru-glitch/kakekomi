@@ -5,7 +5,10 @@
 吐き出せる場所を提供します。G's ACADEMY 卒業制作。
 
 - **公開URL**: https://kakekomi-worker.misty-choru.workers.dev
-- 設計の詳細・仕様: [docs/要件定義書.md](docs/要件定義書.md)
+- 資料:
+  - [使い方（仕様書 / How To Use）](docs/使い方.md)
+  - [ビジネスモデル案](docs/ビジネスモデル案.md)
+  - [要件定義書](docs/要件定義書.md)
 
 ## 何ができるか
 
