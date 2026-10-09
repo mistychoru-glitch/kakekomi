@@ -1217,3 +1217,217 @@ body {
     color: #444;
   }
 }
+
+/* 次の一歩: 根拠と進み具合 */
+.sticky .source {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.sticky .source a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.progress-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.progress-btn[aria-pressed="true"].progress-todo {
+  background: #fff;
+  border-color: var(--accent);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.progress-btn[aria-pressed="true"].progress-done {
+  background: #dcebd2;
+  border-color: #8fb67a;
+  color: #2f5a1f;
+  font-weight: 700;
+}
+
+.progress-btn[aria-pressed="true"].progress-blocked {
+  background: #f6ddd7;
+  border-color: #d98b7c;
+  color: #8a3a2a;
+  font-weight: 700;
+}
+
+.sticky.is-done .action {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+@media print {
+  .print-source {
+    margin: 2px 0 0;
+    font-size: 9pt;
+    color: #555;
+    word-break: break-all;
+  }
+}
+
+/* いまここ（段階図） */
+.stage-map {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.stage-map h3 {
+  margin: 0 0 2px;
+  font-size: 0.95rem;
+}
+
+.stage-title {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.stage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stage {
+  position: relative;
+  padding: 0 0 10px 22px;
+  font-size: 0.85rem;
+}
+
+.stage::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 14px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--border);
+}
+
+.stage:last-child::before {
+  display: none;
+}
+
+.stage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.stage-dot {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: #fff;
+}
+
+.stage-past .stage-label {
+  color: var(--muted);
+}
+
+.stage-past .stage-dot {
+  background: var(--border);
+}
+
+.stage-future .stage-label {
+  color: var(--muted);
+}
+
+.stage-here .stage-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.stage-here .stage-label {
+  font-weight: 700;
+}
+
+.stage-badge {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.stage-note {
+  margin: 4px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.stage-options {
+  margin: 4px 0 0;
+  padding: 8px 10px 8px 26px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.stage-foot {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* 個人情報を伏せて送ることの表示 */
+.mask-hint {
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #e8f1e1;
+  color: #2f5a1f;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.mask-note {
+  align-self: flex-end;
+  max-width: 80%;
+  margin: -4px 4px 4px 0;
+  font-size: 0.72rem;
+  color: #2f5a1f;
+  text-align: right;
+  line-height: 1.5;
+}
+
+.welcome-privacy {
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  color: #2f5a1f;
+  line-height: 1.7;
+}

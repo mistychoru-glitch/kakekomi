@@ -55,7 +55,7 @@ function loadSession() {
   } catch (e) {
     console.warn("failed to load session", e);
   }
-  return { history: [], state: null, lastCandidates: [] };
+  return { history: [], state: null, lastCandidates: [], progress: {} };
 }
 
 function saveSession(s) {
@@ -67,6 +67,7 @@ function saveSession(s) {
 }
 
 let session = loadSession();
+if (!session.progress || typeof session.progress !== "object") session.progress = {};
 
 // ---- アカウント状態 ----
 
@@ -147,6 +148,11 @@ function renderWelcome() {
   }
   wrap.appendChild(list);
 
+  const privacy = document.createElement("p");
+  privacy.className = "welcome-privacy";
+  privacy.innerHTML = phrases("電話番号・メール・口座番号などは、|書いても、|AIには自動で伏せて送ります。");
+  wrap.appendChild(privacy);
+
   const resume = document.createElement("p");
   resume.className = "welcome-resume";
   resume.innerHTML =
@@ -163,11 +169,18 @@ function renderMessages() {
     renderWelcome();
     return;
   }
+  const tokenMap = maskedConversation(session.history).map;
   for (const turn of session.history) {
     const div = document.createElement("div");
     div.className = `msg ${turn.role}`;
-    div.textContent = turn.content;
+    div.textContent = turn.role === "assistant" ? restoreFromMap(turn.content, tokenMap) : turn.content;
     messagesEl.appendChild(div);
+    if (turn.role === "user" && turn.masked && Object.keys(turn.masked).length > 0) {
+      const note = document.createElement("div");
+      note.className = "mask-note";
+      note.textContent = `AIには、${KakekomiMask.describeFound(turn.masked)}を伏せて送りました`;
+      messagesEl.appendChild(note);
+    }
   }
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -314,8 +327,44 @@ document.getElementById("call-script-copy").addEventListener("click", async (e) 
   setTimeout(() => (button.textContent = "コピー"), 2500);
 });
 
+// 「いまここ」の段階図（状況から、決まったルールで作る。AIは使わない）
+function renderStageMap() {
+  const el = document.getElementById("stage-map");
+  const map = window.KakekomiStageMap ? window.KakekomiStageMap.buildStageMap(session.state) : null;
+  el.hidden = !map;
+  el.innerHTML = "";
+  if (!map) return;
+  const node = (tag, className, text) => {
+    const e = document.createElement(tag);
+    if (className) e.className = className;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  el.appendChild(node("h3", "", "いまの位置（目安）"));
+  el.appendChild(node("p", "stage-title", map.title));
+  const ol = node("ol", "stage-list");
+  map.stages.forEach((s) => {
+    const li = node("li", `stage stage-${s.status}`);
+    const head = node("div", "stage-head");
+    head.appendChild(node("span", "stage-dot"));
+    head.appendChild(node("span", "stage-label", s.label));
+    if (s.status === "here") head.appendChild(node("span", "stage-badge", map.hereLabel));
+    li.appendChild(head);
+    if (s.status === "here") {
+      li.appendChild(node("p", "stage-note", s.note));
+      const opts = node("ul", "stage-options");
+      map.options.forEach((t) => opts.appendChild(node("li", "", t)));
+      li.appendChild(opts);
+    }
+    ol.appendChild(li);
+  });
+  el.appendChild(ol);
+  el.appendChild(node("p", "stage-foot", map.foot));
+}
+
 function renderNotes() {
   renderSituation();
+  renderStageMap();
   const candidates = session.lastCandidates || [];
   // スマホの「まとめノート」ボタンに、中身があることを示す印を付ける
   const hasSituation = !document.getElementById("situation").hidden;
@@ -330,9 +379,52 @@ function renderNotes() {
   }
   notesEl.innerHTML = "";
   for (const c of candidates) {
+    const status = KakekomiSteps.statusOf(session.progress, c.id);
     const div = document.createElement("div");
-    div.className = "sticky";
-    div.innerHTML = `<p class="action">${escapeHtml(c.action)}</p><p class="caveat">${escapeHtml(c.caveat)}</p>`;
+    div.className = `sticky${status === "done" ? " is-done" : ""}`;
+    const action = document.createElement("p");
+    action.className = "action";
+    action.textContent = c.action;
+    const caveat = document.createElement("p");
+    caveat.className = "caveat";
+    caveat.textContent = c.caveat;
+    div.append(action, caveat);
+
+    // 根拠: 確認済みの公式サイトのリンクと、確認日（確かめられていない一歩には出さない）
+    if (c.source && KakekomiSteps.isTrustedSourceUrl(c.source.url)) {
+      const p = document.createElement("p");
+      p.className = "source";
+      p.append(document.createTextNode("根拠: "));
+      const a = document.createElement("a");
+      a.href = c.source.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = c.source.label;
+      p.appendChild(a);
+      if (c.source.verifiedAt) p.append(document.createTextNode(`（確認日 ${c.source.verifiedAt}）`));
+      div.appendChild(p);
+    }
+
+    // 進み具合: まだ／やった／できなかった（保存ファイルに持ち越して、再開のときに聞く）
+    const group = document.createElement("div");
+    group.className = "progress";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", "この一歩の進み具合");
+    for (const key of ["todo", "done", "blocked"]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `progress-btn progress-${key}`;
+      b.textContent = KakekomiSteps.STATUS_LABELS[key];
+      b.setAttribute("aria-pressed", String(status === key));
+      b.addEventListener("click", () => {
+        if (key === "todo") delete session.progress[c.id];
+        else session.progress[c.id] = key;
+        saveSession(session);
+        renderNotes();
+      });
+      group.appendChild(b);
+    }
+    div.appendChild(group);
     notesEl.appendChild(div);
   }
 }
@@ -415,7 +507,19 @@ function updateCharCount() {
   charCountEl.textContent = `${len} / ${MESSAGE_MAX}`;
 }
 
-input.addEventListener("input", autoGrow);
+const maskHint = document.getElementById("mask-hint");
+
+function updateMaskHint() {
+  const { found } = KakekomiMask.maskPersonalInfo(input.value, maskKeepDigits());
+  const desc = KakekomiMask.describeFound(found);
+  maskHint.hidden = !desc;
+  if (desc) maskHint.textContent = `${desc}は、AIには伏せて送ります（この画面には、そのまま残ります）`;
+}
+
+input.addEventListener("input", () => {
+  autoGrow();
+  updateMaskHint();
+});
 
 // スマホ・タブレット（指で操作する端末）では、Enterは改行にして、送信は「送る」ボタンだけにする。
 const touchOnly = window.matchMedia("(hover: none) and (pointer: coarse)");
@@ -485,18 +589,46 @@ function showTypingIndicator() {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+// 伏せない電話番号（確認済みの窓口と、危険信号のときの窓口）
+function maskKeepDigits() {
+  const keep = new Set(["0120279338", "0120061338", "0570783556"]);
+  for (const r of resourcesCache) if (r.phone) keep.add(r.phone.replace(/\D/g, ""));
+  return keep;
+}
+
+// AIに送る会話: 相談者の発言は、個人情報に見える部分を、番号つきの伏せ字（〔電話番号1〕など）にする。
+// AIの発言は、署名つきのまま。伏せ字→元の値の対応(map)は、この端末の中だけに持つ。
+function maskedConversation(turns) {
+  const conv = KakekomiMask.maskConversation(turns, maskKeepDigits());
+  const out = conv.turns.map((t) =>
+    t.role === "user" ? { role: "user", content: t.content } : { role: "assistant", content: t.content, sig: t.sig }
+  );
+  return { turns: out, map: conv.map };
+}
+
+// 伏せ字を、この端末の中で、元の値に戻す（AIの返信や、要約に伏せ字が出てきたときのため）
+function restoreFromMap(text, map) {
+  return KakekomiMask.restoreTokens(text, map);
+}
+
 async function sendMessage(message) {
-  session.history.push({ role: "user", content: message });
+  // 画面には、自分が書いた文を、そのまま出す。AIに送る文だけ、個人情報に見える部分を伏せる
+  const masked = KakekomiMask.maskPersonalInfo(message, maskKeepDigits());
+  const turn = { role: "user", content: message };
+  if (Object.keys(masked.found).length > 0) turn.masked = masked.found;
+  session.history.push(turn);
   renderMessages();
   saveSession(session);
   showTypingIndicator();
 
+  // これまでの会話と、いまの発言を、同じ番号の付け方で伏せる（同じ電話番号なら、同じ伏せ字）
+  const conv = maskedConversation(session.history);
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json", ...devHeaders() },
     body: JSON.stringify({
-      message,
-      history: session.history.slice(0, -1),
+      message: conv.turns[conv.turns.length - 1].content,
+      history: conv.turns.slice(0, -1),
       state: session.state,
     }),
   });
@@ -526,6 +658,7 @@ form.addEventListener("submit", async (e) => {
   if (!text) return;
   input.value = "";
   autoGrow();
+  updateMaskHint();
   const button = form.querySelector("button");
   button.disabled = true;
   try {
@@ -547,7 +680,7 @@ form.addEventListener("submit", async (e) => {
 // ---- 新しい相談を始める ----
 
 function resetSession() {
-  session = { history: [], state: null, lastCandidates: [] };
+  session = { history: [], state: null, lastCandidates: [], progress: {} };
   saveSession(session);
   renderMessages();
   renderNotes();
@@ -868,11 +1001,18 @@ function buildExportMarkdown(summary) {
   const dateStr = new Date().toLocaleString("ja-JP");
   const summaryText = summary || SUMMARY_FAILED_TEXT;
   const actionsText = (session.lastCandidates || [])
-    .map((a) => `- **${a.action}**\n  ${a.caveat}`)
+    .map((a) => {
+      const mark = KakekomiSteps.STATUS_LABELS[KakekomiSteps.statusOf(session.progress, a.id)];
+      return `- **${a.action}**（${mark}）\n  ${a.caveat}`;
+    })
     .join("\n\n");
-  // 続きから相談するときに、いまの状況カードと次の一歩を元に戻すためのデータ（画面には出ない）
+  // 続きから相談するときに、いまの状況カードと次の一歩、進み具合を元に戻すためのデータ（画面には出ない）
   const data = toBase64(
-    JSON.stringify({ state: session.state, candidates: session.lastCandidates || [] })
+    JSON.stringify({
+      state: session.state,
+      candidates: session.lastCandidates || [],
+      progress: session.progress || {},
+    })
   );
 
   return [
@@ -915,6 +1055,7 @@ function parseExportMarkdown(text) {
 
   let state = null;
   let candidates = [];
+  let progress = {};
   const m = text.match(new RegExp(`<!--\\s*${DATA_MARKER}\\s+([A-Za-z0-9+/=]+)\\s*-->`));
   if (m) {
     try {
@@ -931,20 +1072,15 @@ function parseExportMarkdown(text) {
       ) {
         state = s;
       }
-      if (state && Array.isArray(data.candidates)) {
-        candidates = data.candidates
-          .filter(
-            (c) =>
-              c && typeof c.id === "string" && typeof c.action === "string" && typeof c.caveat === "string"
-          )
-          .slice(0, 20)
-          .map((c) => ({ id: c.id, action: c.action.slice(0, 300), caveat: c.caveat.slice(0, 600) }));
+      if (state) {
+        candidates = KakekomiSteps.sanitizeCandidates(data.candidates);
+        progress = KakekomiSteps.sanitizeProgress(data.progress, candidates);
       }
     } catch (e) {
       console.warn("failed to read embedded data", e);
     }
   }
-  return { summary: summary.slice(0, IMPORT_SUMMARY_MAX), state, candidates };
+  return { summary: summary.slice(0, IMPORT_SUMMARY_MAX), state, candidates, progress };
 }
 
 const importFileInput = document.getElementById("import-file");
@@ -973,20 +1109,16 @@ async function importConsultationFile(file) {
     return;
   }
 
+  // 前回の「次の一歩」の進み具合（やった／まだ／できなかった）を踏まえて、続きから聞く
+  const resume = KakekomiSteps.resumeMessages(parsed.summary, parsed.candidates, parsed.progress);
   session = {
     history: [
-      {
-        role: "user",
-        content: `【前回の相談の要約】\n${parsed.summary}\n\n上の内容は、以前の相談を保存したファイルから読み込んだものです。この続きから相談させてください。`,
-      },
-      {
-        role: "assistant",
-        content:
-          "前回の相談内容を読み込みました。ここから続きを一緒に整理していきましょう。\n\nその後、状況に変わったことはありますか？気になっていることがあれば、そのまま書いてください。",
-      },
+      { role: "user", content: resume.userText },
+      { role: "assistant", content: resume.assistantText },
     ],
     state: parsed.state,
     lastCandidates: parsed.candidates,
+    progress: parsed.progress,
   };
   saveSession(session);
   renderMessages();
@@ -1026,14 +1158,17 @@ exportNoteButton.addEventListener("click", async () => {
 
   let summary = "";
   try {
+    const conv = maskedConversation(session.history);
     const res = await fetch(`${API_BASE}/api/summarize`, {
       method: "POST",
       headers: { "content-type": "application/json", ...devHeaders() },
-      body: JSON.stringify({ history: session.history }),
+      body: JSON.stringify({ history: conv.turns }),
     });
     if (res.ok) {
       const data = await res.json();
-      summary = data.summary || "";
+      // 要約に伏せ字（〔電話番号1〕など）があれば、この端末の中で、元の値に戻す。
+      // 窓口や専門家に出す要約から、連絡先などが消えないようにするため
+      summary = restoreFromMap(data.summary || "", conv.map);
     }
   } catch (e) {
     console.error(e);
@@ -1092,6 +1227,14 @@ function buildPrintSheet(summary) {
   add("h2", "相談の要約");
   add("p", summary || SUMMARY_FAILED_TEXT, "print-summary");
 
+  const stageMap = window.KakekomiStageMap ? window.KakekomiStageMap.buildStageMap(session.state) : null;
+  if (stageMap) {
+    add("h2", "いまの位置（目安）");
+    const here = stageMap.stages[stageMap.hereIndex];
+    add("p", `${stageMap.title}\nいまここ: ${here.label}（${stageMap.approx ? "目安" : "通知の内容から"}）`, "print-summary");
+    add("p", stageMap.options.map((t) => `・${t}`).join("\n"), "print-summary");
+  }
+
   const candidates = session.lastCandidates || [];
   if (candidates.length > 0) {
     add("h2", "次の一歩（候補）");
@@ -1100,10 +1243,17 @@ function buildPrintSheet(summary) {
       item.className = "print-step";
       const a = document.createElement("p");
       a.className = "print-step-action";
-      a.textContent = c.action;
+      const mark = KakekomiSteps.STATUS_LABELS[KakekomiSteps.statusOf(session.progress, c.id)];
+      a.textContent = `［${mark}］${c.action}`;
       const b = document.createElement("p");
       b.textContent = c.caveat;
       item.append(a, b);
+      if (c.source && KakekomiSteps.isTrustedSourceUrl(c.source.url)) {
+        const s = document.createElement("p");
+        s.className = "print-source";
+        s.textContent = `根拠: ${c.source.label}（${c.source.url}${c.source.verifiedAt ? `、確認日 ${c.source.verifiedAt}` : ""}）`;
+        item.appendChild(s);
+      }
       sheet.appendChild(item);
     }
   }

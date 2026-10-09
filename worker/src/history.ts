@@ -3,7 +3,8 @@
 // - 相談者の発言は、命令の言い回しを含むものは使わず、指示の構造を壊すタグは無効にする
 // - 長さと件数に上限をつけ、巨大な入力による費用の膨張を防ぐ
 
-import { looksLikeInjection, neutralizeTags } from "./guard.ts";
+import { ALLOWED_PHONES, looksLikeInjection, neutralizeTags } from "./guard.ts";
+import { maskPersonalInfo } from "./mask.ts";
 import { verifyText } from "./sign.ts";
 import type { ChatTurn } from "./types.ts";
 
@@ -29,7 +30,9 @@ export async function sanitizeHistory(
     } else {
       const text = content.slice(0, HISTORY_ITEM_MAX);
       if (looksLikeInjection(text)) continue;
-      turns.push({ role, content: neutralizeTags(text) });
+      // AIに送る前に、個人情報に見える部分を伏せる（画面側でも伏せているが、二重の守り）
+      // 伏せ字は、文字の正規化（全角→半角）をするので、タグの無効化は、そのあとにする
+      turns.push({ role, content: neutralizeTags(maskPersonalInfo(text, ALLOWED_PHONES).text) });
     }
   }
   let total = turns.reduce((n, t) => n + t.content.length, 0);

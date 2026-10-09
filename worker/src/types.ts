@@ -72,6 +72,7 @@ export interface StructuredState extends CommonHeader {
 
 export interface CandidateAction {
   id: string;
+  source?: { label: string; url: string; verifiedAt: string }; // 根拠（公式ページと、確認日）
   action: string; // 提示する行動指針
   caveat: string; // 添える注意点
   priority: number; // 小さいほど優先度が高い

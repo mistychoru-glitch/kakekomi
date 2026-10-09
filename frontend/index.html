@@ -38,6 +38,7 @@
   <main class="layout">
     <section class="chat-panel">
       <div id="messages" class="messages" aria-live="polite"></div>
+      <p id="mask-hint" class="mask-hint" role="status" hidden></p>
       <form id="composer" class="composer">
         <textarea id="input" placeholder="今の状況を、思うままに書いてください" rows="3" maxlength="2000"></textarea>
         <button type="submit">送る</button>
@@ -59,6 +60,7 @@
         <dl id="situation-list" class="situation-list"></dl>
         <ul id="situation-flags" class="situation-flags"></ul>
       </section>
+      <section id="stage-map" class="stage-map" hidden></section>
       <h3 id="notes-heading" class="notes-heading" hidden>次の一歩</h3>
       <div id="notes" class="notes">
         <p class="notes-empty">会話が進むと、ここに整理された内容が付箋のように表示されます。</p>
@@ -229,7 +231,7 @@
 <div id="save-modal" class="modal-overlay" hidden>
   <div class="modal">
     <h3>相談内容を保存する</h3>
-    <p class="modal-note">要約ができました。保存のしかたを選んでください。</p>
+    <p class="modal-note">要約ができました。保存のしかたを選んでください。要約には、あなたが書いた電話番号などが、そのまま入ることがあります。窓口や専門家に渡すときは、内容を確かめてください。</p>
     <div class="save-options">
       <button type="button" id="save-file" class="save-option save-option-main">
         <strong>ファイルに保存</strong>
@@ -255,7 +257,7 @@
     <h3>ご利用にあたって</h3>
     <ul class="terms-list">
       <li>Kakekomiは、お金の悩みを整理するためのAIです。<strong>法律・税務・医療などの専門的な助言ではなく</strong>、回答に誤りが含まれることがあります。制度や金額は、必ず自治体や専門家に確認してください。</li>
-      <li>入力した内容は、回答を作るために<strong>AI事業者（Anthropic社）のサービスへ送信</strong>されます。氏名・住所・口座番号など、個人を特定できる情報は入力しないでください。</li>
+      <li>入力した内容は、回答を作るために<strong>AI事業者（Anthropic社）のサービスへ送信</strong>されます。氏名・住所・口座番号など、個人を特定できる情報は入力しないでください。電話番号・メールアドレス・口座番号・マイナンバーなどに見える部分は、<strong>AIに送る前に、自動で伏せます</strong>（画面には、そのまま残ります）。ただし、完全ではありません。</li>
       <li>相談内容はKakekomiのサーバーには<strong>保存されません</strong>。このブラウザの中にだけ残り、「新しい相談を始める」やブラウザのデータ削除で消えます。</li>
       <li>命の危険を感じるほどつらいときは、<strong>よりそいホットライン 0120-279-338</strong>（24時間・無料・匿名）に電話してください。</li>
     </ul>
@@ -265,6 +267,9 @@
   </div>
 </div>
 
+<script src="mask.js"></script>
+<script src="steps.js"></script>
+<script src="stage-map.js"></script>
 <script src="call-script.js"></script>
 <script src="cashflow.js"></script>
 <script src="app.js"></script>

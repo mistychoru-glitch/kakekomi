@@ -2,6 +2,7 @@
 // LLMには言い回しの生成だけを担わせる。MVPでは個人/housing・個人/debt・
 // 事業（簡易版）のみ実装する。
 
+import { sourceFor } from "./sources.ts";
 import type { CandidateAction, StructuredState } from "./types";
 
 function housingCandidates(state: StructuredState): CandidateAction[] {
@@ -315,5 +316,9 @@ export function selectCandidateActions(
   fresh.sort((a, b) => a.priority - b.priority);
 
   const limit = state.psychological_state === "panic" ? 1 : 3;
-  return fresh.slice(0, limit);
+  // 根拠（公式ページと確認日）を、確認できている一歩にだけ添える
+  return fresh.slice(0, limit).map((c) => {
+    const source = sourceFor(c.id);
+    return source ? { ...c, source } : c;
+  });
 }

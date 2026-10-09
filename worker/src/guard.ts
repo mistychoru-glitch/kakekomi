@@ -59,7 +59,7 @@ function digitsOnly(s: string): string {
 }
 
 // 案内してよい電話番号: 確認済みの窓口の一覧と、危険信号のときの窓口だけ
-const ALLOWED_PHONES = new Set<string>(
+export const ALLOWED_PHONES = new Set<string>(
   [...RESOURCES.map((r) => r.phone), ...CRISIS_HOTLINES.map((h) => h.number)]
     .filter((p): p is string => !!p)
     .map(digitsOnly)

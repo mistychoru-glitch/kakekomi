@@ -4,7 +4,8 @@ import { selectCandidateActions } from "./rules";
 import { recordStat } from "./stats";
 import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch, sanitizeClientState } from "./state";
-import { INJECTION_REPLY, looksLikeInjection, neutralizeTags, sanitizeReply } from "./guard";
+import { ALLOWED_PHONES, INJECTION_REPLY, looksLikeInjection, neutralizeTags, sanitizeReply } from "./guard";
+import { maskPersonalInfo } from "./mask";
 import { sanitizeHistory } from "./history";
 import { signText } from "./sign";
 import { isCommonPassword } from "./passwords";
@@ -182,7 +183,8 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   }
 
   const history = await sanitizeHistory(env.CHAT_SIGNING_KEY, body.history);
-  const message = neutralizeTags(rawMessage);
+  // AIに送る文は、個人情報に見える部分を伏せる（画面側でも伏せているが、画面を通さない呼び出しにも効くように）
+  const message = neutralizeTags(maskPersonalInfo(rawMessage, ALLOWED_PHONES).text);
 
   const anthropicEnv = {
     ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
