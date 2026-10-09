@@ -101,20 +101,30 @@ async function authedFetch(path, options = {}) {
 
 // ---- 画面描画 ----
 
+// "|" は、言葉のまとまりの区切り（画面が狭いとき、ここで折り返す）。入力欄に入れるときは取り除く。
 const EXAMPLE_PROMPTS = [
-  "お金のことで悩んでいるけれど、誰にも言えずにいます",
-  "家賃を滞納してしまい、大家さんから督促状が届きました",
-  "借金の返済が苦しくて、毎月の支払いに追われています",
-  "収入が減って、今の家賃を払い続けられるか不安です",
-  "事業の資金繰りが厳しく、来月の支払いが心配です",
+  "お金のことで|悩んでいるけれど、|誰にも|言えずにいます",
+  "家賃を滞納してしまい、|大家さんから|督促状が届きました",
+  "借金の返済が苦しくて、|毎月の支払いに|追われています",
+  "収入が減って、|今の家賃を|払い続けられるか|不安です",
+  "事業の資金繰りが厳しく、|来月の支払いが|心配です",
 ];
+
+// 日本語は、画面が狭いと単語の途中で折り返されるので、言葉のまとまりごとに折り返す。
+// "|" で区切った部分は、途中で切れない。
+function phrases(text) {
+  return text
+    .split("|")
+    .map((p) => `<span class="nb">${p}</span>`)
+    .join("");
+}
 
 function renderWelcome() {
   const wrap = document.createElement("div");
   wrap.className = "welcome";
   wrap.innerHTML = `
-    <p class="welcome-lead">誰にも言えないお金の悩みができてしまった人へ。</p>
-    <p class="welcome-sub">匿名・登録なしで、状況を整理して、今日の一歩と電話の台本まで一緒に作ります。<br>うまく書けなくても大丈夫です。思いつくままに書いてください。下の例を選んで、書き換えて送ることもできます。</p>
+    <p class="welcome-lead">${phrases("誰にも言えない|お金の悩みが|できてしまった人へ。")}</p>
+    <p class="welcome-sub">${phrases("匿名・登録なしで、|状況を整理して、|今日の一歩と|電話の台本まで|一緒に作ります。")}<br>${phrases("うまく書けなくても大丈夫です。|思いつくままに書いてください。|下の例を選んで、|書き換えて送ることもできます。")}</p>
   `;
   const list = document.createElement("div");
   list.className = "welcome-examples";
@@ -122,9 +132,10 @@ function renderWelcome() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "example-chip";
-    btn.textContent = text;
+    const plain = text.replace(/\|/g, "");
+    btn.innerHTML = phrases(text);
     btn.addEventListener("click", () => {
-      input.value = text;
+      input.value = plain;
       autoGrow();
       input.focus();
     });
@@ -405,7 +416,7 @@ input.addEventListener("input", autoGrow);
 const touchOnly = window.matchMedia("(hover: none) and (pointer: coarse)");
 
 const PLACEHOLDER_DESKTOP = "今の状況を、思うままに書いてみてください（Enterで送信、Shift+Enterで改行）";
-const PLACEHOLDER_TOUCH = "今の状況を、思うままに書いてみてください（送信は右の「送る」ボタンです）";
+const PLACEHOLDER_TOUCH = "今の状況を、思うままに書いてください（送信は右のボタン）";
 
 function updatePlaceholder() {
   input.placeholder = touchOnly.matches ? PLACEHOLDER_TOUCH : PLACEHOLDER_DESKTOP;

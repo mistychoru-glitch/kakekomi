@@ -914,3 +914,8 @@ body {
     margin: 0;
   }
 }
+
+/* 言葉のまとまりの途中では折り返さない */
+.nb {
+  display: inline-block;
+}
