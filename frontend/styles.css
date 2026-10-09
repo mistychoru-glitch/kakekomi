@@ -619,6 +619,17 @@ body {
   line-height: 1.6;
 }
 
+.resource-link {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.resource-link a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 @media (max-width: 720px) {
   .app {
     padding: 12px 12px 8px;

@@ -234,7 +234,12 @@ async function loadResources() {
           ? `<p class="resource-phone"><a href="tel:${escapeHtml(r.phone.replace(/[^0-9]/g, ""))}">${escapeHtml(r.phone)}</a>${r.hours ? `<span>${escapeHtml(r.hours)}</span>` : ""}</p>`
           : "";
         const how = r.howToFind ? `<p class="resource-how">${escapeHtml(r.howToFind)}</p>` : "";
-        return `<div class="resource"><p class="resource-name">${escapeHtml(r.name)}</p>${phone}<p class="resource-does">${escapeHtml(r.whatTheyDo)}</p>${how}</div>`;
+        // 公式の探し方ページ。https のリンクだけを表示する
+        const link =
+          r.link && /^https:\/\//.test(r.link.url)
+            ? `<p class="resource-link"><a href="${escapeHtml(r.link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.link.label)}</a></p>`
+            : "";
+        return `<div class="resource"><p class="resource-name">${escapeHtml(r.name)}</p>${phone}<p class="resource-does">${escapeHtml(r.whatTheyDo)}</p>${how}${link}</div>`;
       })
       .join("");
   } catch (e) {
