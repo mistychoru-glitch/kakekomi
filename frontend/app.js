@@ -102,7 +102,7 @@ async function authedFetch(path, options = {}) {
 // ---- 画面描画 ----
 
 const EXAMPLE_PROMPTS = [
-  "督促状が届いたけれど、誰にも言えずにいます",
+  "お金のことで悩んでいるけれど、誰にも言えずにいます",
   "家賃を滞納してしまい、大家さんから督促状が届きました",
   "借金の返済が苦しくて、毎月の支払いに追われています",
   "収入が減って、今の家賃を払い続けられるか不安です",
@@ -113,8 +113,8 @@ function renderWelcome() {
   const wrap = document.createElement("div");
   wrap.className = "welcome";
   wrap.innerHTML = `
-    <p class="welcome-lead">督促状が届いたのに、誰にも言えずにいませんか。</p>
-    <p class="welcome-sub">ここは、お金の悩みを安心して話せる場所です。うまく書けなくても大丈夫です。<br>思いつくままに書いてください。下の例を選んで、書き換えて送ることもできます。</p>
+    <p class="welcome-lead">誰にも言えないお金の悩みができてしまった人へ。</p>
+    <p class="welcome-sub">匿名・登録なしで、状況を整理して、今日の一歩と電話の台本まで一緒に作ります。<br>うまく書けなくても大丈夫です。思いつくままに書いてください。下の例を選んで、書き換えて送ることもできます。</p>
   `;
   const list = document.createElement("div");
   list.className = "welcome-examples";
