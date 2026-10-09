@@ -3,7 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kakekomi</title>
+<title>Kakekomi｜督促状が届いたのに、誰にも言えないあなたへ</title>
+<meta name="description" content="督促状が届いたのに、誰にも言えない。そんなお金の悩みを、匿名で話して、次の一歩に整理できます。相談内容はサーバーに保存されません。" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Kakekomi" />
+<meta property="og:title" content="Kakekomi｜督促状が届いたのに、誰にも言えないあなたへ" />
+<meta property="og:description" content="お金の悩みを、匿名で話して、次の一歩に整理できます。相談内容はサーバーに保存されません。" />
+<meta property="og:url" content="https://kakekomi-worker.misty-choru.workers.dev/" />
+<meta property="og:image" content="https://kakekomi-worker.misty-choru.workers.dev/ogp.png" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" content="#faf7f2" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -125,6 +135,30 @@
     </div>
   </div>
 </div>
+
+<!-- 相談内容の保存方法の選択 -->
+<div id="save-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <h3>相談内容を保存する</h3>
+    <p class="modal-note">要約ができました。保存のしかたを選んでください。</p>
+    <div class="save-options">
+      <button type="button" id="save-file" class="save-option save-option-main">
+        <strong>ファイルに保存</strong>
+        <span>あとで「前回の相談の続きから始める」で読み込めます</span>
+      </button>
+      <button type="button" id="save-print" class="save-option">
+        <strong>印刷・PDFにする</strong>
+        <span>窓口や専門家に見せるときに便利です</span>
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="modal-cancel" data-close>閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 印刷・PDF用（画面には出さない） -->
+<div id="print-sheet" class="print-sheet" aria-hidden="true"></div>
 
 <!-- ご利用にあたって（初回に表示。同意するまで閉じられない） -->
 <div id="terms-modal" class="modal-overlay" data-static hidden>

@@ -85,7 +85,9 @@ export async function extractStatePatch(
     model: env.ANTHROPIC_MODEL,
     max_tokens: 512,
     system:
-      "あなたは会話ログから構造化状態の差分だけを抽出するアシスタントです。推測で断定せず、発言から読み取れる範囲のみ update_structured_state ツールを呼び出してください。",
+      "あなたは会話ログから構造化状態の差分だけを抽出するアシスタントです。推測で断定せず、発言から読み取れる範囲のみ update_structured_state ツールを呼び出してください。" +
+      "分類のルール: 家賃・大家・管理会社・賃貸・住まいに触れていれば sub_category に housing を含める。借入・カード・ローン・消費者金融・返済に触れていれば debt を含める。両方に当てはまるなら両方入れる。" +
+      "「督促状が届いた」とだけ言われ、誰からの何の督促状かが分からないときは、housing や debt を決めつけず、notice_type_unknown を true にする（ただし、督促状の種類が不明でも、家賃の金額や住まいの話が出ていれば housing は含める）。",
     messages: [
       ...recentHistory.map((t) => ({ role: t.role, content: t.content })),
       {

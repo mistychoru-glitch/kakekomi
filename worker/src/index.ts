@@ -1,6 +1,7 @@
 import { extractStatePatch, generateReply, summarizeConsultation } from "./anthropic";
 import { buildSystemPrompt, buildCrisisResponse } from "./prompt";
 import { selectCandidateActions } from "./rules";
+import { recordStat } from "./stats";
 import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch } from "./state";
 import { createInitialState } from "./types";
@@ -138,6 +139,7 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   // 2章: 緊急性の無条件上書きレイヤー（最優先・キーワードベースで即判定）。
   // AIを呼ばない固定応答なので、回数制限や文字数制限よりも先に必ず判定する。
   if (detectCrisis(message)) {
+    await recordStat(env.DB, "crisis");
     const response: ChatResponseBody = {
       reply: buildCrisisResponse(),
       state,
@@ -178,6 +180,9 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
     candidateActions.map((a) => a.id)
   );
 
+  await recordStat(env.DB, "messages");
+  if (history.length === 0) await recordStat(env.DB, "consultations");
+
   const response: ChatResponseBody = {
     reply,
     state: finalState,
@@ -204,6 +209,7 @@ async function handleSummarize(req: Request, env: Env): Promise<Response> {
     ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
   };
   const summary = await summarizeConsultation(anthropicEnv, history);
+  await recordStat(env.DB, "summaries");
   return json({ summary });
 }
 
@@ -273,6 +279,7 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
   try {
     const user = await createUser(env.DB, loginId, displayName, password);
     const token = await createSession(env.DB, user.id);
+    await recordStat(env.DB, "registrations");
     return json({
       token,
       loginId: user.loginId,

@@ -102,6 +102,7 @@ async function authedFetch(path, options = {}) {
 // ---- 画面描画 ----
 
 const EXAMPLE_PROMPTS = [
+  "督促状が届いたけれど、誰にも言えずにいます",
   "家賃を滞納してしまい、大家さんから督促状が届きました",
   "借金の返済が苦しくて、毎月の支払いに追われています",
   "収入が減って、今の家賃を払い続けられるか不安です",
@@ -112,8 +113,8 @@ function renderWelcome() {
   const wrap = document.createElement("div");
   wrap.className = "welcome";
   wrap.innerHTML = `
-    <p class="welcome-lead">ここは、お金の悩みを安心して話せる場所です。</p>
-    <p class="welcome-sub">うまく書けなくても大丈夫です。思いつくままに書いてください。<br>下の例を選んで、書き換えて送ることもできます。</p>
+    <p class="welcome-lead">督促状が届いたのに、誰にも言えずにいませんか。</p>
+    <p class="welcome-sub">ここは、お金の悩みを安心して話せる場所です。うまく書けなくても大丈夫です。<br>思いつくままに書いてください。下の例を選んで、書き換えて送ることもできます。</p>
   `;
   const list = document.createElement("div");
   list.className = "welcome-examples";
@@ -965,9 +966,83 @@ exportNoteButton.addEventListener("click", async () => {
     exportNoteButton.textContent = "相談内容を保存する";
   }
 
-  const md = buildExportMarkdown(summary);
+  pendingSummary = summary;
+  openModal("save-modal");
+});
+
+// ---- 保存方法の選択（ファイル / 印刷・PDF） ----
+
+let pendingSummary = "";
+
+document.getElementById("save-file").addEventListener("click", () => {
+  const md = buildExportMarkdown(pendingSummary);
   const filename = `kakekomi-${new Date().toISOString().slice(0, 10)}.md`;
   downloadFile(filename, md, "text/markdown");
+  closeModal("save-modal");
+});
+
+// 印刷用の紙面を作る。入力された内容は textContent で入れる（HTMLとして解釈させない）。
+function buildPrintSheet(summary) {
+  const sheet = document.getElementById("print-sheet");
+  sheet.innerHTML = "";
+  const add = (tag, text, className) => {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    el.textContent = text;
+    sheet.appendChild(el);
+    return el;
+  };
+
+  add("h1", "Kakekomi 相談メモ");
+  add("p", `作成日: ${new Date().toLocaleDateString("ja-JP")}`, "print-meta");
+
+  const { rows, flags } = situationRows(session.state);
+  if (rows.length > 0 || flags.length > 0) {
+    add("h2", "いまの状況");
+    const dl = document.createElement("dl");
+    for (const [k, v] of rows) {
+      const wrap = document.createElement("div");
+      const dt = document.createElement("dt");
+      dt.textContent = k;
+      const dd = document.createElement("dd");
+      dd.textContent = v;
+      wrap.append(dt, dd);
+      dl.appendChild(wrap);
+    }
+    sheet.appendChild(dl);
+    if (flags.length > 0) add("p", flags.join(" / "), "print-flags");
+  }
+
+  add("h2", "相談の要約");
+  add("p", summary || SUMMARY_FAILED_TEXT, "print-summary");
+
+  const candidates = session.lastCandidates || [];
+  if (candidates.length > 0) {
+    add("h2", "次の一歩（候補）");
+    for (const c of candidates) {
+      const item = document.createElement("div");
+      item.className = "print-step";
+      const a = document.createElement("p");
+      a.className = "print-step-action";
+      a.textContent = c.action;
+      const b = document.createElement("p");
+      b.textContent = c.caveat;
+      item.append(a, b);
+      sheet.appendChild(item);
+    }
+  }
+
+  add(
+    "p",
+    "この内容は、AIが会話をもとに整理したものです。法律・税務などの専門的な助言ではなく、誤りが含まれることがあります。制度や金額は、必ず窓口や専門家に確認してください。",
+    "print-note"
+  );
+}
+
+document.getElementById("save-print").addEventListener("click", () => {
+  buildPrintSheet(pendingSummary);
+  closeModal("save-modal");
+  window.print();
 });
 
 // ---- 初期化 ----

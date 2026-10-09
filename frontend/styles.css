@@ -630,6 +630,51 @@ body {
   font-weight: 600;
 }
 
+/* 保存方法の選択 */
+.save-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.save-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.save-option span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.save-option-main {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.save-option-main span {
+  color: #fff;
+  opacity: 0.9;
+}
+
+.print-sheet {
+  display: none;
+}
+
 @media (max-width: 720px) {
   .app {
     padding: 12px 12px 8px;
@@ -740,5 +785,90 @@ body {
 
   .notes-close {
     display: inline-block;
+  }
+}
+
+/* 印刷・PDF: 相談メモだけを白い紙面に出す */
+@media print {
+  html, body {
+    height: auto;
+    overflow: visible;
+    background: #fff;
+  }
+
+  .app,
+  .modal-overlay {
+    display: none !important;
+  }
+
+  .print-sheet {
+    display: block;
+    color: #000;
+    font-size: 11.5pt;
+    line-height: 1.8;
+    padding: 0;
+  }
+
+  .print-sheet h1 {
+    font-size: 18pt;
+    margin: 0 0 4px;
+  }
+
+  .print-sheet h2 {
+    font-size: 13pt;
+    margin: 18px 0 6px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #999;
+  }
+
+  .print-meta {
+    margin: 0;
+    color: #444;
+    font-size: 10pt;
+  }
+
+  .print-sheet dl {
+    margin: 0;
+  }
+
+  .print-sheet dl > div {
+    display: flex;
+    gap: 12px;
+  }
+
+  .print-sheet dt {
+    width: 9em;
+    flex-shrink: 0;
+    color: #444;
+  }
+
+  .print-sheet dd {
+    margin: 0;
+  }
+
+  .print-summary {
+    white-space: pre-wrap;
+    margin: 0;
+  }
+
+  .print-step {
+    margin-bottom: 8px;
+    break-inside: avoid;
+  }
+
+  .print-step p {
+    margin: 0;
+  }
+
+  .print-step-action {
+    font-weight: 700;
+  }
+
+  .print-note {
+    margin-top: 22px;
+    padding-top: 8px;
+    border-top: 1px solid #999;
+    font-size: 9.5pt;
+    color: #444;
   }
 }
