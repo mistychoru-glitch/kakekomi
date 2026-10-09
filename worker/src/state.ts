@@ -1,4 +1,5 @@
-import type { StructuredState } from "./types";
+import { createInitialState } from "./types.ts";
+import type { StructuredState } from "./types.ts";
 
 type FieldType = "boolean" | "integer" | "string";
 
@@ -68,7 +69,12 @@ function coerce(type: FieldType, value: unknown): boolean | number | string | un
       return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : undefined;
     case "string": {
       if (typeof value !== "string") return undefined;
-      const text = value.trim().slice(0, MAX_TEXT);
+      // 山括弧は、指示の構造（<...>のタグ）を壊すのに使えるので、全角にして無効にする
+      const text = value
+        .trim()
+        .slice(0, MAX_TEXT)
+        .replace(/</g, "＜")
+        .replace(/>/g, "＞");
       return text ? text : undefined;
     }
   }
@@ -116,5 +122,41 @@ export function markActionsPresented(
   const next: StructuredState = structuredClone(state);
   const merged = new Set([...next.presented_actions, ...actionIds]);
   next.presented_actions = Array.from(merged);
+  return next;
+}
+
+const ACTION_ID = /^[a-z0-9_]{1,60}$/;
+
+/**
+ * ブラウザから送られてきた「状態」を、そのまま信用せず、項目ごとに型・長さ・選択肢を確かめて作り直す。
+ * 状態は、AIへの指示（システムプロンプト）の中に入る値なので、ここが指示の書き換えの入口になりうる。
+ */
+export function sanitizeClientState(raw: unknown): StructuredState {
+  const base = createInitialState();
+  if (!raw || typeof raw !== "object") return base;
+  const s = raw as Record<string, unknown>;
+
+  const patch: Record<string, unknown> = {};
+  for (const key of Object.keys(COMMON_ENUMS)) patch[key] = s[key];
+  const personal = s.personal && typeof s.personal === "object" ? (s.personal as Record<string, unknown>) : {};
+  const business = s.business && typeof s.business === "object" ? (s.business as Record<string, unknown>) : {};
+  for (const key of Object.keys(PERSONAL_FIELDS)) patch[key] = personal[key];
+  for (const key of Object.keys(BUSINESS_FIELDS)) patch[key] = business[key];
+  patch.sub_category = personal.sub_category;
+
+  const next = mergeStatePatch(base, patch);
+
+  if (Array.isArray(s.presented_actions)) {
+    next.presented_actions = s.presented_actions
+      .filter((v): v is string => typeof v === "string" && ACTION_ID.test(v))
+      .slice(0, 60);
+  }
+  if (Array.isArray(s.already_consulted)) {
+    next.already_consulted = s.already_consulted
+      .filter((v): v is string => typeof v === "string")
+      .map((v) => v.trim().slice(0, MAX_TEXT).replace(/</g, "＜").replace(/>/g, "＞"))
+      .filter(Boolean)
+      .slice(0, 10);
+  }
   return next;
 }

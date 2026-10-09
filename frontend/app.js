@@ -506,7 +506,8 @@ async function sendMessage(message) {
   }
 
   const data = await res.json();
-  session.history.push({ role: "assistant", content: data.reply });
+  // sig は、サーバーが出した返信だという署名。履歴に戻して送るときに、サーバーが確かめる
+  session.history.push({ role: "assistant", content: data.reply, sig: data.sig });
   session.state = data.state;
   // サーバーは「まだ提示していない候補」だけを返すので、上書きせず溜めていく
   session.lastCandidates = mergeCandidates(session.lastCandidates, data.candidateActions);

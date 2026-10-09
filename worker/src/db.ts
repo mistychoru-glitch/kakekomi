@@ -117,16 +117,33 @@ export async function verifyLogin(
     )
     .bind(loginId)
     .first<Pick<UserRow, "id" | "login_id" | "display_name" | "password_hash" | "plan_status">>();
-  if (!row) return null;
+  if (!row) {
+    // 存在しないIDでも、本物と同じだけ計算して、応答の速さの違いからIDの有無を探られないようにする
+    await verifyPassword(password, await dummyHash());
+    return null;
+  }
   const ok = await verifyPassword(password, row.password_hash);
   if (!ok) return null;
   return { id: row.id, loginId: row.login_id, displayName: row.display_name, planStatus: row.plan_status };
+}
+
+let cachedDummyHash: string | null = null;
+async function dummyHash(): Promise<string> {
+  if (!cachedDummyHash) cachedDummyHash = await hashPassword("kakekomi-dummy-password");
+  return cachedDummyHash;
 }
 
 const SESSION_TTL_DAYS = 30;
 
 function sessionCutoff(): string {
   return new Date(Date.now() - SESSION_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+// ログイン後の合言葉（トークン）は、DBにそのまま保存しない（ハッシュだけ保存する）。
+// DBの中身が見られても、そこからログイン状態を乗っ取れないようにするため。
+async function hashToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export async function createSession(db: D1Database, userId: string): Promise<string> {
@@ -136,13 +153,13 @@ export async function createSession(db: D1Database, userId: string): Promise<str
   const token = generateToken();
   await db
     .prepare("INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)")
-    .bind(token, userId, new Date().toISOString())
+    .bind(await hashToken(token), userId, new Date().toISOString())
     .run();
   return token;
 }
 
 export async function deleteSession(db: D1Database, token: string): Promise<void> {
-  await db.prepare("DELETE FROM sessions WHERE token = ?").bind(token).run();
+  await db.prepare("DELETE FROM sessions WHERE token = ?").bind(await hashToken(token)).run();
 }
 
 export async function getUserByToken(db: D1Database, token: string): Promise<AuthedUser | null> {
@@ -153,7 +170,7 @@ export async function getUserByToken(db: D1Database, token: string): Promise<Aut
        FROM sessions JOIN users ON sessions.user_id = users.id
        WHERE sessions.token = ? AND sessions.created_at > ?`
     )
-    .bind(token, cutoff)
+    .bind(await hashToken(token), cutoff)
     .first<{ id: string; login_id: string; display_name: string; plan_status: string }>();
   if (!row) return null;
   return { id: row.id, loginId: row.login_id, displayName: row.display_name, planStatus: row.plan_status };

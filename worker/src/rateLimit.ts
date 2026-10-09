@@ -7,6 +7,8 @@
 //   端末の識別には使えない。開発者自身を制限から除外したい場合は DEV_BYPASS_KEY を使う。
 // - 窓は「最初のアクセスから windowSeconds 秒」。窓を過ぎた行は次のアクセスで数え直す。
 
+import { timingSafeEqualStrings } from "./auth.ts";
+
 export interface RateLimitEnv {
   DB: D1Database;
   DEV_BYPASS_KEY?: string;
@@ -18,7 +20,7 @@ const FOREVER_SECONDS = 60 * 60 * 24 * 365 * 100;
 export function isDevBypass(env: RateLimitEnv, req: Request): boolean {
   const key = env.DEV_BYPASS_KEY;
   if (!key) return false;
-  return req.headers.get(DEV_BYPASS_HEADER) === key;
+  return timingSafeEqualStrings(req.headers.get(DEV_BYPASS_HEADER) ?? "", key);
 }
 
 /**

@@ -6,7 +6,10 @@ export type StatMetric =
   | "messages" // 相談の送信（AIが返信した回数）
   | "summaries" // 相談内容の保存（要約の作成）
   | "registrations" // 新規登録
-  | "crisis"; // 危険信号を検知して、固定の案内を返した回数
+  | "crisis" // 危険信号を検知して、固定の案内を返した回数
+  | "blocked" // 攻撃の言い回しを検知して、固定の返信で断った回数
+  | "reply_filtered" // AIの返信から、未確認の電話番号・リンクを取り除いた回数
+  | "leak_blocked"; // システムプロンプトの漏れを検知して、返信を差し替えた回数
 
 // 日付は日本時間で区切る（UTC+9）。
 export function jstDay(now = Date.now()): string {

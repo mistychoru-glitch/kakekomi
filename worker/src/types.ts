@@ -138,6 +138,7 @@ export interface ChatRequestBody {
 
 export interface ChatResponseBody {
   reply: string;
+  sig: string; // 返信の署名。履歴に戻すときに、サーバーが出した発言だと確かめるのに使う
   state: StructuredState;
   candidateActions: CandidateAction[];
   safetyTriggered: boolean;

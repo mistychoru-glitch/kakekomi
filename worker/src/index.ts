@@ -3,9 +3,11 @@ import { buildSystemPrompt, buildCrisisResponse } from "./prompt";
 import { selectCandidateActions } from "./rules";
 import { recordStat } from "./stats";
 import { detectCrisis } from "./safety";
-import { markActionsPresented, mergeStatePatch } from "./state";
-import { createInitialState } from "./types";
-import type { ChatRequestBody, ChatResponseBody, ChatTurn, StructuredState } from "./types";
+import { markActionsPresented, mergeStatePatch, sanitizeClientState } from "./state";
+import { INJECTION_REPLY, looksLikeInjection, neutralizeTags, sanitizeReply } from "./guard";
+import { sanitizeHistory } from "./history";
+import { signText } from "./sign";
+import type { ChatRequestBody, ChatResponseBody } from "./types";
 import { timingSafeEqualStrings } from "./auth";
 import { RESOURCES } from "./resources";
 import {
@@ -28,6 +30,7 @@ import {
 export interface Env {
   DB: D1Database;
   ANTHROPIC_API_KEY: string;
+  CHAT_SIGNING_KEY?: string; // AIの返信の署名に使う鍵（会話の履歴への、偽のAI発言の混入を防ぐ）
   ANTHROPIC_MODEL: string;
   DEV_BYPASS_KEY?: string;
   DAILY_AI_LIMIT?: string;
@@ -87,61 +90,64 @@ function withCors(req: Request, res: Response): Response {
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      // 相談の内容や状態が入るので、ブラウザや途中の中継にキャッシュさせない
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    },
   });
+}
+
+// 大きすぎる入力で、メモリや費用を使い切られないよう、受け取る大きさに上限をつける。
+class HttpError extends Error {
+  constructor(
+    public status: number,
+    public code: string
+  ) {
+    super(code);
+  }
+}
+
+const AUTH_BODY_MAX = 8 * 1024;
+const CHAT_BODY_MAX = 600 * 1024;
+
+async function readJson<T>(req: Request, maxBytes: number): Promise<T> {
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new HttpError(413, "payload_too_large");
+  const text = await req.text();
+  if (text.length > maxBytes) throw new HttpError(413, "payload_too_large");
+  try {
+    const value = JSON.parse(text);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("not an object");
+    return value as T;
+  } catch {
+    throw new HttpError(400, "invalid_json");
+  }
 }
 
 const MESSAGE_MAX = 2000;
 const HISTORY_MAX_TURNS = 30;
-const HISTORY_ITEM_MAX = 4000;
-const STATE_MAX_JSON = 20000;
-
-// クライアントから届く履歴・状態は信用せず、形と大きさを整えてからAIに渡す
-// （不正な形式によるエラーや、巨大な入力によるコスト膨張を防ぐ）。
-function sanitizeHistory(raw: unknown, maxTurns = HISTORY_MAX_TURNS): ChatTurn[] {
-  if (!Array.isArray(raw)) return [];
-  const turns: ChatTurn[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const { role, content } = item as { role?: unknown; content?: unknown };
-    if ((role !== "user" && role !== "assistant") || typeof content !== "string") continue;
-    if (!content.trim()) continue;
-    turns.push({ role, content: content.slice(0, HISTORY_ITEM_MAX) });
-  }
-  const recent = turns.slice(-maxTurns);
-  while (recent.length > 0 && recent[0].role !== "user") recent.shift();
-  return recent;
-}
-
-function sanitizeState(raw: unknown): StructuredState {
-  const s = raw as Partial<StructuredState> | null | undefined;
-  const looksValid =
-    !!s &&
-    typeof s === "object" &&
-    !!s.personal &&
-    !!s.business &&
-    Array.isArray(s.presented_actions) &&
-    Array.isArray(s.already_consulted) &&
-    JSON.stringify(s).length <= STATE_MAX_JSON;
-  return looksValid ? (s as StructuredState) : createInitialState();
-}
 
 async function handleChat(req: Request, env: Env): Promise<Response> {
-  const body = (await req.json()) as Partial<ChatRequestBody>;
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  const history = sanitizeHistory(body.history);
-  const state = sanitizeState(body.state);
+  const body = await readJson<Partial<ChatRequestBody>>(req, CHAT_BODY_MAX);
+  const rawMessage = typeof body.message === "string" ? body.message.trim() : "";
+  // 状態は、そのまま信用せず、項目ごとに検証して作り直す（AIへの指示に入る値なので）
+  const state = sanitizeClientState(body.state);
+  const isFirstMessage = !Array.isArray(body.history) || body.history.length === 0;
 
-  if (!message) {
+  if (!rawMessage) {
     return json({ error: "message is required" }, 400);
   }
 
   // 2章: 緊急性の無条件上書きレイヤー（最優先・キーワードベースで即判定）。
   // AIを呼ばない固定応答なので、回数制限や文字数制限よりも先に必ず判定する。
-  if (detectCrisis(message)) {
+  if (detectCrisis(rawMessage)) {
     await recordStat(env.DB, "crisis");
+    const reply = buildCrisisResponse();
     const response: ChatResponseBody = {
-      reply: buildCrisisResponse(),
+      reply,
+      sig: await signText(env.CHAT_SIGNING_KEY, reply),
       state,
       candidateActions: [],
       safetyTriggered: true,
@@ -149,15 +155,33 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
     return json(response);
   }
 
-  if (message.length > MESSAGE_MAX) {
+  if (rawMessage.length > MESSAGE_MAX) {
     return json({ error: "message_too_long" }, 400);
   }
   if (!(await checkRateLimit(env, req, "chat", 30, 3600))) {
     return rateLimited();
   }
+
+  // 「指示を無視して」「システムプロンプトを教えて」などの、はっきりした攻撃の言い回しは、
+  // AIを呼ばずに、固定の返信で断る（費用もかからず、AIが影響を受けることもない）。
+  if (looksLikeInjection(rawMessage)) {
+    await recordStat(env.DB, "blocked");
+    const response: ChatResponseBody = {
+      reply: INJECTION_REPLY,
+      sig: await signText(env.CHAT_SIGNING_KEY, INJECTION_REPLY),
+      state,
+      candidateActions: [],
+      safetyTriggered: false,
+    };
+    return json(response);
+  }
+
   if (!(await checkDailyBudget(env, req, dailyLimit(env)))) {
     return dailyLimited();
   }
+
+  const history = await sanitizeHistory(env.CHAT_SIGNING_KEY, body.history);
+  const message = neutralizeTags(rawMessage);
 
   const anthropicEnv = {
     ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
@@ -173,7 +197,11 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
 
   // 7章: システムプロンプトを動的に組み立てて応答生成
   const systemPrompt = buildSystemPrompt(updatedState, candidateActions);
-  const reply = await generateReply(anthropicEnv, systemPrompt, history, message);
+  const rawReply = await generateReply(anthropicEnv, systemPrompt, history, message);
+
+  // AIの返信も、そのまま信用しない。確認済みでない電話番号やリンク、システムプロンプトの漏れを取り除く
+  const checked = sanitizeReply(rawReply);
+  if (checked.changed) await recordStat(env.DB, checked.leaked ? "leak_blocked" : "reply_filtered");
 
   const finalState = markActionsPresented(
     updatedState,
@@ -181,10 +209,11 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   );
 
   await recordStat(env.DB, "messages");
-  if (history.length === 0) await recordStat(env.DB, "consultations");
+  if (isFirstMessage) await recordStat(env.DB, "consultations");
 
   const response: ChatResponseBody = {
-    reply,
+    reply: checked.text,
+    sig: await signText(env.CHAT_SIGNING_KEY, checked.text),
     state: finalState,
     candidateActions,
     safetyTriggered: false,
@@ -199,8 +228,8 @@ async function handleSummarize(req: Request, env: Env): Promise<Response> {
   if (!(await checkDailyBudget(env, req, dailyLimit(env)))) {
     return dailyLimited();
   }
-  const body = (await req.json()) as { history?: unknown };
-  const history = sanitizeHistory(body.history, HISTORY_MAX_TURNS * 2);
+  const body = await readJson<{ history?: unknown }>(req, CHAT_BODY_MAX);
+  const history = await sanitizeHistory(env.CHAT_SIGNING_KEY, body.history, HISTORY_MAX_TURNS * 2);
   if (history.length === 0) {
     return json({ error: "history_required" }, 400);
   }
@@ -208,7 +237,7 @@ async function handleSummarize(req: Request, env: Env): Promise<Response> {
     ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
     ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
   };
-  const summary = await summarizeConsultation(anthropicEnv, history);
+  const summary = sanitizeReply(await summarizeConsultation(anthropicEnv, history)).text;
   await recordStat(env.DB, "summaries");
   return json({ summary });
 }
@@ -242,11 +271,11 @@ function adminLoginId(env: Env): string | null {
 }
 
 async function handleRegister(req: Request, env: Env): Promise<Response> {
-  const body = (await req.json()) as {
+  const body = await readJson<{
     login_id?: string;
     display_name?: string;
     password?: string;
-  };
+  }>(req, AUTH_BODY_MAX);
   const loginId = (body.login_id ?? "").trim().toLowerCase();
   const displayName = (body.display_name ?? "").trim();
   const password = body.password ?? "";
@@ -299,7 +328,7 @@ async function handleLogin(req: Request, env: Env): Promise<Response> {
   if (!(await checkRateLimit(env, req, "login", 15, 3600))) {
     return rateLimited();
   }
-  const body = (await req.json()) as { login_id?: string; password?: string };
+  const body = await readJson<{ login_id?: string; password?: string }>(req, AUTH_BODY_MAX);
   const loginId = (body.login_id ?? "").trim().toLowerCase();
   const password = body.password ?? "";
 
@@ -340,11 +369,11 @@ async function handlePasswordReset(req: Request, env: Env): Promise<Response> {
   if (!(await checkRateLimit(env, req, "reset", 10, 3600))) {
     return rateLimited();
   }
-  const body = (await req.json()) as {
+  const body = await readJson<{
     login_id?: string;
     recovery_code?: string;
     new_password?: string;
-  };
+  }>(req, AUTH_BODY_MAX);
   const loginId = (body.login_id ?? "").trim().toLowerCase();
   const recoveryCode = body.recovery_code ?? "";
   const newPassword = body.new_password ?? "";
@@ -410,6 +439,7 @@ async function route(req: Request, env: Env): Promise<Response> {
         return await handleLogout(req, env);
       }
     } catch (err) {
+      if (err instanceof HttpError) return json({ error: err.code }, err.status);
       console.error(err);
       return json({ error: "internal_error" }, 500);
     }
