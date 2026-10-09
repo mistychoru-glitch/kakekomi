@@ -67,6 +67,7 @@
         <p class="notes-empty">会話が進むと、ここに整理された内容が付箋のように表示されます。</p>
       </div>
       <button type="button" id="call-script-open" class="call-script-btn" hidden>電話で話す内容をつくる</button>
+      <button type="button" id="cashflow-open-note" class="call-script-btn" hidden>資金繰りチェックをする</button>
       <details class="resources">
         <summary>相談窓口の一覧</summary>
         <div id="resources-list" class="resources-list"><p class="notes-empty">読み込み中…</p></div>
@@ -137,6 +138,83 @@
   </div>
 </div>
 
+<!-- 資金繰りチェック（経営者向け） -->
+<div id="cashflow-modal" class="modal-overlay" hidden>
+  <div class="modal modal-wide">
+    <h3>資金繰りチェック（経営者向け）</h3>
+    <p class="modal-note">手元の資金・毎月の支出・今後3か月の入金の見込みから、資金が足りなくなる時期を試算します。入力した数字は、このブラウザの中だけで計算し、サーバーには送りません。単位は<strong>万円</strong>です。</p>
+
+    <form id="cashflow-form" novalidate>
+      <fieldset class="cf-fieldset">
+        <legend>いまの資金</legend>
+        <div class="cf-grid"><label for="cf-cash">手元の資金（現預金）</label><span class="cf-unit"><input id="cf-cash" name="cash" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+      </fieldset>
+
+      <fieldset class="cf-fieldset">
+        <legend>毎月の支出</legend>
+        <div class="cf-grid"><label for="cf-payroll">給与（社会保険料の会社負担を含む）</label><span class="cf-unit"><input id="cf-payroll" name="payroll" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+        <div class="cf-grid"><label for="cf-rent">家賃・リース</label><span class="cf-unit"><input id="cf-rent" name="rent" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+        <div class="cf-grid"><label for="cf-debt">借入の返済</label><span class="cf-unit"><input id="cf-debt" name="debt" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+        <div class="cf-grid"><label for="cf-tax">税金・社会保険料</label><span class="cf-unit"><input id="cf-tax" name="tax" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+        <div class="cf-grid"><label for="cf-other">その他（仕入・外注・経費など）</label><span class="cf-unit"><input id="cf-other" name="other" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+      </fieldset>
+
+      <fieldset class="cf-fieldset">
+        <legend>今後の入金の見込み</legend>
+        <div class="cf-grid"><label for="cf-in1">来月</label><span class="cf-unit"><input id="cf-in1" name="in1" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+        <div class="cf-grid"><label for="cf-in2">再来月</label><span class="cf-unit"><input id="cf-in2" name="in2" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+        <div class="cf-grid"><label for="cf-in3">3か月後</label><span class="cf-unit"><input id="cf-in3" name="in3" type="number" inputmode="decimal" min="0" step="0.1" /> 万円</span></div>
+      </fieldset>
+
+      <fieldset class="cf-fieldset">
+        <legend>まだ入金されていない売上（任意・最大5件）</legend>
+        <p class="modal-note">入金を早められないか、連絡する順番を出します。取引先の名前は、略称や記号で構いません。</p>
+        <div id="cf-recv-rows"></div>
+        <button type="button" class="link-btn" id="cf-add-recv">＋ 取引先を追加</button>
+        <details class="cf-import">
+          <summary>表から貼り付けて取り込む</summary>
+          <p class="modal-note">スプレッドシートの行（取引先名・金額・遅れの日数）をコピーして貼り付けます。貼り付けた内容は、このブラウザの中だけで処理し、サーバーにもAIにも送りません。</p>
+          <textarea id="cf-recv-paste" rows="4" placeholder="例）A商事　1200000　20"></textarea>
+          <label class="cf-file">またはCSVファイルを選ぶ（文字コードは自動で判断します）<input id="cf-recv-file" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
+          <label class="cf-inline">金額の単位
+            <select id="cf-recv-unit"><option value="yen">円</option><option value="man">万円</option></select>
+          </label>
+          <button type="button" class="modal-cancel" id="cf-recv-import">取り込む</button>
+        </details>
+      </fieldset>
+
+      <fieldset class="cf-fieldset">
+        <legend>主な支払い先（任意・最大8件）</legend>
+        <p class="modal-note">どこに「支払いの猶予」を相談するか、順番を出します。今後1〜2か月で支払う、主なものを入れてください。</p>
+        <div id="cf-pay-rows"></div>
+        <button type="button" class="link-btn" id="cf-add-pay">＋ 支払い先を追加</button>
+        <details class="cf-import">
+          <summary>表から貼り付けて取り込む</summary>
+          <p class="modal-note">スプレッドシートの行（支払い先・金額・期日までの日数・種類）をコピーして貼り付けます。種類は「仕入」「家賃」「借入」「税」「給与」などの言葉から判断します。貼り付けた内容は、このブラウザの中だけで処理します。</p>
+          <textarea id="cf-pay-paste" rows="4" placeholder="例）建材店　800000　5　仕入"></textarea>
+          <label class="cf-file">またはCSVファイルを選ぶ（文字コードは自動で判断します）<input id="cf-pay-file" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" /></label>
+          <label class="cf-inline">金額の単位
+            <select id="cf-pay-unit"><option value="yen">円</option><option value="man">万円</option></select>
+          </label>
+          <button type="button" class="modal-cancel" id="cf-pay-import">取り込む</button>
+        </details>
+      </fieldset>
+
+      <label class="modal-check cf-save-opt">
+        <input id="cf-save" type="checkbox" />
+        この入力を、このブラウザに保存する（取引先名は保存しません。初期は保存しません）
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="cf-clear">入力を消す</button>
+        <button type="button" class="modal-cancel" data-close>閉じる</button>
+        <button type="submit" class="modal-primary">試算する</button>
+      </div>
+    </form>
+
+    <div id="cashflow-result" hidden></div>
+  </div>
+</div>
+
 <!-- 電話の台本 -->
 <div id="call-script-modal" class="modal-overlay" hidden>
   <div class="modal">
@@ -191,6 +269,7 @@
 </div>
 
 <script src="call-script.js"></script>
+<script src="cashflow.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

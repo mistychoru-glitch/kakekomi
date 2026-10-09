@@ -146,7 +146,7 @@ function renderWelcome() {
   const resume = document.createElement("p");
   resume.className = "welcome-resume";
   resume.innerHTML =
-    '前に保存したファイルがある方は、<button type="button" class="link-btn" id="import-open">前回の相談の続きから始める</button>';
+    '前に保存したファイルがある方は、<button type="button" class="link-btn" id="import-open">前回の相談の続きから始める</button><br>経営者の方は、<button type="button" class="link-btn" id="cashflow-open">資金繰りチェック</button>もできます';
   wrap.appendChild(resume);
   messagesEl.appendChild(wrap);
 }
@@ -317,6 +317,7 @@ function renderNotes() {
   const hasSituation = !document.getElementById("situation").hidden;
   notesOpenButton.classList.toggle("has-notes", hasSituation || candidates.length > 0);
   callScriptOpenButton.hidden = !currentCallScript();
+  cashflowNoteButton.hidden = !(session.state && session.state.category === "business");
   document.getElementById("notes-heading").hidden = candidates.length === 0;
   if (candidates.length === 0) {
     notesEl.innerHTML =
@@ -1111,6 +1112,417 @@ document.getElementById("save-print").addEventListener("click", () => {
   buildPrintSheet(pendingSummary);
   closeModal("save-modal");
   window.print();
+});
+
+// ---- 資金繰りチェック（経営者向け） ----
+// 数字も取引先名も、このブラウザの中だけで計算する（通信しない）。画面には本名のまま出す。
+// 画面の外に出るもの（AIに相談する文・印刷/PDF）だけ、名前を入れない／伏せられるようにしている。
+
+const CF_KEY = "kakekomi_cashflow_v1";
+const cfModal = document.getElementById("cashflow-modal");
+const cfForm = document.getElementById("cashflow-form");
+const cfResultEl = document.getElementById("cashflow-result");
+const cfRecvRows = document.getElementById("cf-recv-rows");
+const cfPayRows = document.getElementById("cf-pay-rows");
+const cfSave = document.getElementById("cf-save");
+const cashflowNoteButton = document.getElementById("cashflow-open-note");
+
+const CF_KIND_OPTIONS = [
+  ["supplier", "仕入・外注"],
+  ["rent", "家賃・リース"],
+  ["other", "その他の支払い"],
+  ["loan", "借入の返済"],
+  ["tax", "税金・社会保険料"],
+  ["payroll", "給与"],
+];
+const CF_REL_OPTIONS = [
+  ["good", "相談しやすい"],
+  ["normal", "ふつう"],
+  ["hard", "相談しにくい"],
+];
+const CF_IMPACT_OPTIONS = [
+  ["replaceable", "止まっても代わりがある"],
+  ["critical", "止まると事業が回らない"],
+];
+const CF_FIELDS = ["cash", "payroll", "rent", "debt", "tax", "other", "in1", "in2", "in3"];
+
+function cfNode(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function cfInput(type, name, placeholder, value, extra = {}) {
+  const el = document.createElement("input");
+  el.type = type;
+  el.dataset.field = name;
+  el.placeholder = placeholder;
+  if (type === "number") {
+    el.inputMode = "decimal";
+    el.min = "0";
+    el.step = "0.1";
+  }
+  if (value !== undefined && value !== null && value !== "") el.value = value;
+  Object.assign(el, extra);
+  return el;
+}
+
+function cfSelect(name, options, value) {
+  const el = document.createElement("select");
+  el.dataset.field = name;
+  for (const [v, label] of options) {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = label;
+    if (v === value) o.selected = true;
+    el.appendChild(o);
+  }
+  return el;
+}
+
+function cfRemoveButton(row) {
+  const b = cfNode("button", "cf-remove", "×");
+  b.type = "button";
+  b.setAttribute("aria-label", "この行を消す");
+  b.addEventListener("click", () => row.remove());
+  return b;
+}
+
+function addRecvRow(v = {}) {
+  if (cfRecvRows.children.length >= KakekomiCashflow.MAX_IMPORT) return;
+  const row = cfNode("div", "cf-row cf-recv");
+  row.append(
+    cfInput("text", "name", "取引先名（略称でOK）", v.name, { maxLength: 40 }),
+    cfInput("number", "amount", "金額（万円）", v.amount),
+    cfInput("number", "lateDays", "遅れ（日）", v.lateDays),
+    cfRemoveButton(row)
+  );
+  cfRecvRows.appendChild(row);
+}
+
+function addPayRow(v = {}) {
+  if (cfPayRows.children.length >= KakekomiCashflow.MAX_IMPORT) return;
+  const row = cfNode("div", "cf-row cf-pay");
+  row.append(
+    cfInput("text", "name", "支払い先（略称でOK）", v.name, { maxLength: 40 }),
+    cfInput("number", "amount", "金額（万円）", v.amount),
+    cfInput("number", "dueDays", "期日まで（日）", v.dueDays),
+    cfSelect("kind", CF_KIND_OPTIONS, v.kind || "supplier"),
+    cfSelect("rel", CF_REL_OPTIONS, v.rel || "normal"),
+    cfSelect("impact", CF_IMPACT_OPTIONS, v.impact || "replaceable"),
+    cfRemoveButton(row)
+  );
+  cfPayRows.appendChild(row);
+}
+
+function readRows(container) {
+  return [...container.children].map((row) => {
+    const o = {};
+    row.querySelectorAll("[data-field]").forEach((el) => (o[el.dataset.field] = el.value));
+    return o;
+  });
+}
+
+function readCashflowForm() {
+  const input = {};
+  for (const f of CF_FIELDS) input[f] = cfForm.elements[f].value;
+  input.recv = readRows(cfRecvRows);
+  input.pay = readRows(cfPayRows);
+  return input;
+}
+
+function fillCashflowForm(input) {
+  for (const f of CF_FIELDS) cfForm.elements[f].value = input[f] ?? "";
+  cfRecvRows.innerHTML = "";
+  cfPayRows.innerHTML = "";
+  (input.recv || []).forEach(addRecvRow);
+  (input.pay || []).forEach(addPayRow);
+  if (cfRecvRows.children.length === 0) addRecvRow();
+  if (cfPayRows.children.length === 0) addPayRow();
+}
+
+// 保存を選んだときだけ、このブラウザに保存する。取引先名は保存しない。
+function saveCashflowInput(input) {
+  try {
+    if (!cfSave.checked) {
+      localStorage.removeItem(CF_KEY);
+      return;
+    }
+    const strip = (rows) => rows.map((r) => ({ ...r, name: "" }));
+    localStorage.setItem(CF_KEY, JSON.stringify({ ...input, recv: strip(input.recv), pay: strip(input.pay) }));
+  } catch (e) {
+    console.warn("failed to save cashflow input", e);
+  }
+}
+
+function loadSavedCashflowInput() {
+  try {
+    const raw = localStorage.getItem(CF_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function showCashflowForm() {
+  cfForm.hidden = false;
+  cfResultEl.hidden = true;
+}
+
+function openCashflow() {
+  const saved = loadSavedCashflowInput();
+  cfSave.checked = !!saved;
+  fillCashflowForm(saved || {});
+  showCashflowForm();
+  openModal("cashflow-modal");
+}
+
+function cfName(kind, item, masked) {
+  return masked ? KakekomiCashflow.labelOf(kind, item.idx) : item.name;
+}
+
+function cfPlan(input, masked) {
+  const result = KakekomiCashflow.compute(input);
+  const plan = KakekomiCashflow.buildPlan(result, input.recv, resourcesCache, input.pay, {
+    nameOf: (kind, item) => cfName(kind, item, masked),
+  });
+  return { result, plan };
+}
+
+function renderCashflowResult(input) {
+  const { result, plan } = cfPlan(input, false); // 画面は、本名のまま
+  const man = KakekomiCashflow.formatMan;
+  cfResultEl.innerHTML = "";
+  const add = (el) => (cfResultEl.appendChild(el), el);
+
+  if (result.severity === "empty") {
+    add(cfNode("p", "cf-banner cf-empty", "数字を入れてください。手元の資金と、毎月の支出、入金の見込みが分かると、試算できます。"));
+    const back = add(cfNode("button", "modal-cancel", "入力に戻る"));
+    back.type = "button";
+    back.addEventListener("click", showCashflowForm);
+    cfForm.hidden = true;
+    cfResultEl.hidden = false;
+    return;
+  }
+
+  add(cfNode("p", `cf-banner cf-${result.severity}`, plan.headline));
+
+  const table = add(cfNode("table", "cf-table"));
+  const head = table.createTHead().insertRow();
+  ["月", "入金", "支出", "月末の残高"].forEach((t) => head.appendChild(cfNode("th", "", t)));
+  const body = table.createTBody();
+  const base = body.insertRow();
+  base.appendChild(cfNode("td", "", "いま"));
+  base.appendChild(cfNode("td", "", ""));
+  base.appendChild(cfNode("td", "", ""));
+  base.appendChild(cfNode("td", "", `${man(result.cash)}万円`));
+  for (const m of result.months) {
+    const tr = body.insertRow();
+    tr.appendChild(cfNode("td", "", `${m.month}か月後`));
+    tr.appendChild(cfNode("td", "", `${man(m.inflow)}万円`));
+    tr.appendChild(cfNode("td", "", `${man(m.outflow)}万円`));
+    tr.appendChild(cfNode("td", m.balance < 0 ? "cf-neg" : "", `${man(m.balance)}万円`));
+  }
+
+  add(cfNode("h4", "cf-h", "次の一歩"));
+  for (const s of plan.steps) {
+    const card = add(cfNode("div", "sticky"));
+    card.appendChild(cfNode("p", "action", s.action));
+    card.appendChild(cfNode("p", "caveat", s.caveat));
+  }
+
+  if (plan.collect.length > 0) {
+    add(cfNode("h4", "cf-h", "入金を早めたい取引先の順番"));
+    const ol = add(cfNode("ol", "cf-list"));
+    for (const c of plan.collect) {
+      const late = c.lateDays > 0 ? `${c.lateDays}日遅れ` : "遅れなし";
+      ol.appendChild(cfNode("li", "", `${c.name}（約${man(c.amount)}万円・${late}）`));
+    }
+  }
+
+  if (plan.defer.ranked.length > 0) {
+    add(cfNode("h4", "cf-h", "支払いの猶予を相談する順番"));
+    const ol = add(cfNode("ol", "cf-list cf-defer"));
+    for (const r of plan.defer.ranked) {
+      const li = cfNode("li");
+      li.appendChild(cfNode("strong", "", `${r.name}`));
+      li.appendChild(cfNode("span", "cf-meta", `（${r.kindLabel}・約${man(r.amount)}万円・期日まで${r.dueDays}日）`));
+      if (r.reasons.length > 0) {
+        const chips = cfNode("div", "cf-chips");
+        r.reasons.forEach((t) => chips.appendChild(cfNode("span", "cf-chip", t)));
+        li.appendChild(chips);
+      }
+      li.appendChild(cfNode("p", "cf-approach", r.approach));
+      if (r.caution) li.appendChild(cfNode("p", "cf-caution", r.caution));
+      ol.appendChild(li);
+    }
+  }
+  if (plan.defer.routed.length > 0) {
+    add(cfNode("h4", "cf-h", "取引先への猶予の対象にしない支払い"));
+    const ul = add(cfNode("ul", "cf-list"));
+    for (const r of plan.defer.routed) {
+      ul.appendChild(cfNode("li", "", `${r.name}（${r.kindLabel}・約${man(r.amount)}万円）: ${r.advice}`));
+    }
+  }
+
+  add(
+    cfNode(
+      "p",
+      "modal-note",
+      "簡易の試算です。法律・税務などの専門的な助言ではありません。入力した数字と取引先名は、このブラウザの中だけで扱い、サーバーにもAIにも送っていません。"
+    )
+  );
+
+  const maskLabel = add(cfNode("label", "modal-check"));
+  const mask = document.createElement("input");
+  mask.type = "checkbox";
+  mask.id = "cf-mask-print";
+  maskLabel.append(mask, document.createTextNode("印刷・PDFでは、取引先名を伏せる（売掛先A・支払先B…と表示）"));
+
+  const actions = add(cfNode("div", "cf-actions"));
+  const printBtn = cfNode("button", "modal-cancel", "印刷・PDFにする");
+  printBtn.type = "button";
+  printBtn.addEventListener("click", () => printCashflow(input, mask.checked));
+  const askBtn = cfNode("button", "modal-primary", "この結果をもとに相談する");
+  askBtn.type = "button";
+  askBtn.addEventListener("click", () => {
+    // AIに送る文には、取引先名を入れない（合計の数字だけ）
+    input_message_from_cashflow(result, plan);
+  });
+  const backBtn = cfNode("button", "modal-cancel", "入力を直す");
+  backBtn.type = "button";
+  backBtn.addEventListener("click", showCashflowForm);
+  actions.append(backBtn, printBtn, askBtn);
+
+  cfForm.hidden = true;
+  cfResultEl.hidden = false;
+  cfResultEl.scrollTop = 0;
+  cfModal.querySelector(".modal").scrollTop = 0;
+}
+
+function input_message_from_cashflow(result, plan) {
+  const man = KakekomiCashflow.formatMan;
+  const text = `資金繰りチェックの結果です。手元の資金は約${man(result.cash)}万円、毎月の支出は約${man(result.outTotal)}万円で、${plan.headline}。何から手をつければいいですか。`;
+  closeModal("cashflow-modal");
+  input.value = text;
+  autoGrow();
+  input.focus();
+}
+
+function printCashflow(formInput, masked) {
+  const { result, plan } = cfPlan(formInput, masked);
+  const man = KakekomiCashflow.formatMan;
+  const sheet = document.getElementById("print-sheet");
+  sheet.innerHTML = "";
+  const add = (tag, text, className) => {
+    const el = cfNode(tag, className, text);
+    sheet.appendChild(el);
+    return el;
+  };
+  add("h1", "資金繰りチェック");
+  add("p", `作成日: ${new Date().toLocaleDateString("ja-JP")}${masked ? "（取引先名は伏せています）" : ""}`, "print-meta");
+  add("h2", "結果");
+  add("p", plan.headline, "print-summary");
+
+  const table = document.createElement("table");
+  table.className = "print-table";
+  const head = table.createTHead().insertRow();
+  ["月", "入金", "支出", "月末の残高"].forEach((t) => head.appendChild(cfNode("th", "", t)));
+  const body = table.createTBody();
+  const base = body.insertRow();
+  ["いま", "", "", `${man(result.cash)}万円`].forEach((t) => base.appendChild(cfNode("td", "", t)));
+  for (const m of result.months) {
+    const tr = body.insertRow();
+    [`${m.month}か月後`, `${man(m.inflow)}万円`, `${man(m.outflow)}万円`, `${man(m.balance)}万円`].forEach((t) =>
+      tr.appendChild(cfNode("td", "", t))
+    );
+  }
+  sheet.appendChild(table);
+
+  add("h2", "次の一歩（候補）");
+  for (const s of plan.steps) {
+    const item = cfNode("div", "print-step");
+    item.appendChild(cfNode("p", "print-step-action", s.action));
+    item.appendChild(cfNode("p", "", s.caveat));
+    sheet.appendChild(item);
+  }
+  if (plan.collect.length > 0) {
+    add("h2", "入金を早めたい取引先の順番");
+    plan.collect.forEach((c, i) =>
+      add("p", `${i + 1}. ${cfName("recv", c, masked)}（約${man(c.amount)}万円・${c.lateDays > 0 ? `${c.lateDays}日遅れ` : "遅れなし"}）`, "print-line")
+    );
+  }
+  if (plan.defer.ranked.length > 0) {
+    add("h2", "支払いの猶予を相談する順番");
+    plan.defer.ranked.forEach((r, i) => {
+      add("p", `${i + 1}. ${cfName("pay", r, masked)}（${r.kindLabel}・約${man(r.amount)}万円・期日まで${r.dueDays}日）${r.reasons.length ? ` — ${r.reasons.join("、")}` : ""}`, "print-line");
+      add("p", r.approach, "print-line-sub");
+    });
+  }
+  add("p", "簡易の試算です。法律・税務などの専門的な助言ではありません。数字は入力された内容にもとづき、確認は専門家や窓口に委ねてください。", "print-note");
+  window.print();
+}
+
+// 表から貼り付けて取り込む（ブラウザの中だけで処理する）
+function importPasted(kind, textOverride) {
+  const isRecv = kind === "recv";
+  const ta = document.getElementById(isRecv ? "cf-recv-paste" : "cf-pay-paste");
+  const unit = document.getElementById(isRecv ? "cf-recv-unit" : "cf-pay-unit").value;
+  const { rows, ignored } = KakekomiCashflow.parsePasted(textOverride !== undefined ? textOverride : ta.value, kind, unit);
+  if (rows.length === 0) {
+    alert("取り込める行がありませんでした。1行ごとに「名前・金額・日数」の順で、金額が数字になっているか確認してください。");
+    return;
+  }
+  const container = isRecv ? cfRecvRows : cfPayRows;
+  container.innerHTML = "";
+  rows.forEach(isRecv ? addRecvRow : addPayRow);
+  ta.value = "";
+  if (ignored > 0) alert(`${KakekomiCashflow.MAX_IMPORT}件までを取り込みました。残りの${ignored}件は取り込んでいません。`);
+}
+
+cfForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const formInput = readCashflowForm();
+  saveCashflowInput(formInput);
+  renderCashflowResult(formInput);
+});
+// CSVファイル: ブラウザの中で読み、サーバーには送らない。大きすぎるファイルは読まない。
+const CF_FILE_MAX_BYTES = 1024 * 1024;
+for (const [id, kind] of [["cf-recv-file", "recv"], ["cf-pay-file", "pay"]]) {
+  const fileInput = document.getElementById(id);
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (!file) return;
+    if (file.size > CF_FILE_MAX_BYTES) {
+      alert("ファイルが大きすぎます（1MBまで）。必要な行だけにして、もう一度選んでください。");
+      return;
+    }
+    try {
+      importPasted(kind, KakekomiCashflow.decodeText(await file.arrayBuffer()));
+    } catch (e) {
+      console.warn("failed to read csv", e);
+      alert("ファイルを読み込めませんでした。CSV形式（.csv）か、タブ区切りの文字ファイルを選んでください。");
+    }
+  });
+}
+document.getElementById("cf-add-recv").addEventListener("click", () => addRecvRow());
+document.getElementById("cf-add-pay").addEventListener("click", () => addPayRow());
+document.getElementById("cf-recv-import").addEventListener("click", () => importPasted("recv"));
+document.getElementById("cf-pay-import").addEventListener("click", () => importPasted("pay"));
+document.getElementById("cf-clear").addEventListener("click", () => {
+  try {
+    localStorage.removeItem(CF_KEY);
+  } catch (e) {
+    /* 保存できない環境では何もしない */
+  }
+  cfSave.checked = false;
+  fillCashflowForm({});
+});
+cashflowNoteButton.addEventListener("click", openCashflow);
+messagesEl.addEventListener("click", (e) => {
+  if (e.target.id === "cashflow-open") openCashflow();
 });
 
 // ---- 初期化 ----
