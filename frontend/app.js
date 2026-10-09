@@ -1,7 +1,7 @@
 // 会話履歴・構造化状態は常にブラウザのlocalStorageのみに保持し、サーバー（D1）には
 // 一切書き込まない。学校のレギュレーション、および機密情報を保管するリスクを踏まえて、
 // 会話内容そのものはサーバーに一切保存しない方針とした（ログイン機能のみ提供）。
-// 残しておきたい場合は「相談内容を書き出す」でMarkdownファイルとしてダウンロードする。
+// 残しておきたい場合は「相談内容を保存する」でMarkdownファイルとしてダウンロードする。
 
 // 画面とAPIは同じWorkerから配信されるので、通常は同じオリジンの /api を呼ぶ。
 // HTMLファイルを直接開いた場合（file://）だけ、ローカルの開発サーバーを指す。
@@ -31,6 +31,20 @@ const input = document.getElementById("input");
 const newSessionButton = document.getElementById("new-session");
 const exportNoteButton = document.getElementById("export-note");
 const accountArea = document.getElementById("account-area");
+const notesPanel = document.getElementById("note-panel");
+const notesOpenButton = document.getElementById("notes-open");
+
+// スマホでは、まとめノートは「まとめノート」ボタンで開く全画面の表示にしている。
+function setNotesOpen(open) {
+  notesPanel.classList.toggle("open", open);
+  notesOpenButton.setAttribute("aria-expanded", String(open));
+  if (open) notesPanel.scrollTop = 0;
+}
+notesOpenButton.addEventListener("click", () => setNotesOpen(true));
+document.getElementById("notes-close").addEventListener("click", () => setNotesOpen(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && notesPanel.classList.contains("open")) setNotesOpen(false);
+});
 
 // ---- 会話セッション（chat）の状態 ----
 
@@ -116,11 +130,19 @@ function renderWelcome() {
     list.appendChild(btn);
   }
   wrap.appendChild(list);
+
+  const resume = document.createElement("p");
+  resume.className = "welcome-resume";
+  resume.innerHTML =
+    '前に保存したファイルがある方は、<button type="button" class="link-btn" id="import-open">前回の相談の続きから始める</button>';
+  wrap.appendChild(resume);
   messagesEl.appendChild(wrap);
 }
 
 function renderMessages() {
   messagesEl.innerHTML = "";
+  // スマホでは、会話が始まったら説明バナーを隠して、会話の場所を広げる（CSS側で判定）
+  document.body.classList.toggle("has-history", session.history.length > 0);
   if (session.history.length === 0) {
     renderWelcome();
     return;
@@ -224,6 +246,9 @@ async function loadResources() {
 function renderNotes() {
   renderSituation();
   const candidates = session.lastCandidates || [];
+  // スマホの「まとめノート」ボタンに、中身があることを示す印を付ける
+  const hasSituation = !document.getElementById("situation").hidden;
+  notesOpenButton.classList.toggle("has-notes", hasSituation || candidates.length > 0);
   document.getElementById("notes-heading").hidden = candidates.length === 0;
   if (candidates.length === 0) {
     notesEl.innerHTML =
@@ -319,9 +344,38 @@ function updateCharCount() {
 
 input.addEventListener("input", autoGrow);
 
+// スマホ・タブレット（指で操作する端末）では、Enterは改行にして、送信は「送る」ボタンだけにする。
+const touchOnly = window.matchMedia("(hover: none) and (pointer: coarse)");
+
+const PLACEHOLDER_DESKTOP = "今の状況を、思うままに書いてみてください（Enterで送信、Shift+Enterで改行）";
+const PLACEHOLDER_TOUCH = "今の状況を、思うままに書いてみてください（送信は右の「送る」ボタンです）";
+
+function updatePlaceholder() {
+  input.placeholder = touchOnly.matches ? PLACEHOLDER_TOUCH : PLACEHOLDER_DESKTOP;
+}
+updatePlaceholder();
+touchOnly.addEventListener("change", updatePlaceholder);
+
+// スマホでキーボードが出ても、入力欄が画面の下に見えたままになるよう、
+// 見えている領域（キーボードを除いた高さ）にアプリの高さを合わせる。
+if (window.visualViewport) {
+  const syncViewportHeight = () => {
+    if (!touchOnly.matches) {
+      document.documentElement.style.removeProperty("--app-h");
+      return;
+    }
+    document.documentElement.style.setProperty("--app-h", `${window.visualViewport.height}px`);
+    window.scrollTo(0, 0);
+  };
+  window.visualViewport.addEventListener("resize", syncViewportHeight);
+  window.visualViewport.addEventListener("scroll", syncViewportHeight);
+  syncViewportHeight();
+}
+
 input.addEventListener("keydown", (e) => {
-  // Enterで送信、Shift+Enterで改行（Mac/Windows共通の一般的なチャットUIの挙動）。
+  // PC: Enterで送信、Shift+Enterで改行（Mac/Windows共通の一般的なチャットUIの挙動）。
   // 日本語入力の変換確定Enter（isComposing / keyCode 229）は送信扱いにしない。
+  if (touchOnly.matches) return;
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
     e.preventDefault();
     form.requestSubmit();
@@ -435,7 +489,7 @@ newSessionButton.addEventListener("click", () => {
   }
   if (
     confirm(
-      "今の相談内容を消して、新しい相談を始めますか？この操作は取り消せません。残しておきたい場合は先に「相談内容を書き出す」を使ってください。"
+      "今の相談内容を消して、新しい相談を始めますか？この操作は取り消せません。残しておきたい場合は先に「相談内容を保存する」を使ってください。"
     )
   ) {
     resetSession();
@@ -712,19 +766,38 @@ accountArea.addEventListener("click", (e) => {
   if (e.target.id === "logout-btn") logout();
 });
 
-// ---- 相談内容の書き出し（Markdownファイルとしてダウンロード） ----
+// ---- 相談内容の保存（Markdownファイルとしてダウンロード） ----
+
+const SUMMARY_FAILED_TEXT = "（要約の作成に失敗しました）";
+const DATA_MARKER = "kakekomi-data:v1";
+
+function toBase64(str) {
+  let bin = "";
+  new TextEncoder().encode(str).forEach((b) => (bin += String.fromCharCode(b)));
+  return btoa(bin);
+}
+
+function fromBase64(b64) {
+  const bin = atob(b64);
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
 
 function buildExportMarkdown(summary) {
   const dateStr = new Date().toLocaleString("ja-JP");
-  const summaryText = summary || "（要約の作成に失敗しました）";
+  const summaryText = summary || SUMMARY_FAILED_TEXT;
   const actionsText = (session.lastCandidates || [])
     .map((a) => `- **${a.action}**\n  ${a.caveat}`)
     .join("\n\n");
+  // 続きから相談するときに、いまの状況カードと次の一歩を元に戻すためのデータ（画面には出ない）
+  const data = toBase64(
+    JSON.stringify({ state: session.state, candidates: session.lastCandidates || [] })
+  );
 
   return [
     `# Kakekomi 相談記録`,
     ``,
-    `書き出し日時: ${dateStr}`,
+    `保存日時: ${dateStr}`,
+    `このファイルは、Kakekomiの「前回の相談の続きから始める」で読み込むと、続きから相談できます。`,
     ``,
     `## 要約`,
     ``,
@@ -734,8 +807,120 @@ function buildExportMarkdown(summary) {
     ``,
     actionsText || "（まだ整理された行動指針はありません）",
     ``,
+    `<!-- ${DATA_MARKER} ${data} -->`,
+    ``,
   ].join("\n");
 }
+
+// ---- 保存したファイルの読み込み（前回の続きから相談する） ----
+
+const IMPORT_FILE_MAX_BYTES = 300 * 1024;
+// サーバーが1発言ごとに受け付ける長さ（HISTORY_ITEM_MAX=4000）に収まるようにする
+const IMPORT_SUMMARY_MAX = 3200;
+
+function parseExportMarkdown(text) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const start = lines.findIndex((l) => /^##[ \t]+要約[ \t]*$/.test(l));
+  if (start === -1) return null;
+
+  const body = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^##[ \t]/.test(lines[i]) || lines[i].includes(`<!-- ${DATA_MARKER}`)) break;
+    body.push(lines[i]);
+  }
+  const summary = body.join("\n").trim();
+  if (!summary || summary === SUMMARY_FAILED_TEXT) return null;
+
+  let state = null;
+  let candidates = [];
+  const m = text.match(new RegExp(`<!--\\s*${DATA_MARKER}\\s+([A-Za-z0-9+/=]+)\\s*-->`));
+  if (m) {
+    try {
+      const data = JSON.parse(fromBase64(m[1]));
+      const s = data && data.state;
+      if (
+        s &&
+        typeof s === "object" &&
+        s.personal && typeof s.personal === "object" &&
+        s.business && typeof s.business === "object" &&
+        Array.isArray(s.presented_actions) &&
+        Array.isArray(s.already_consulted) &&
+        JSON.stringify(s).length <= 20000
+      ) {
+        state = s;
+      }
+      if (state && Array.isArray(data.candidates)) {
+        candidates = data.candidates
+          .filter(
+            (c) =>
+              c && typeof c.id === "string" && typeof c.action === "string" && typeof c.caveat === "string"
+          )
+          .slice(0, 20)
+          .map((c) => ({ id: c.id, action: c.action.slice(0, 300), caveat: c.caveat.slice(0, 600) }));
+      }
+    } catch (e) {
+      console.warn("failed to read embedded data", e);
+    }
+  }
+  return { summary: summary.slice(0, IMPORT_SUMMARY_MAX), state, candidates };
+}
+
+const importFileInput = document.getElementById("import-file");
+
+async function importConsultationFile(file) {
+  const unreadable =
+    "このファイルからは相談内容を読み取れませんでした。Kakekomiの「相談内容を保存する」で保存したファイル（.md）を選んでください。";
+  if (file.size > IMPORT_FILE_MAX_BYTES) {
+    alert(unreadable);
+    return;
+  }
+  let parsed = null;
+  try {
+    parsed = parseExportMarkdown(await file.text());
+  } catch (e) {
+    console.warn("failed to read file", e);
+  }
+  if (!parsed) {
+    alert(unreadable);
+    return;
+  }
+  if (
+    session.history.length > 0 &&
+    !confirm("今の相談内容は消えて、読み込んだ内容に置き換わります。よろしいですか？")
+  ) {
+    return;
+  }
+
+  session = {
+    history: [
+      {
+        role: "user",
+        content: `【前回の相談の要約】\n${parsed.summary}\n\n上の内容は、以前の相談を保存したファイルから読み込んだものです。この続きから相談させてください。`,
+      },
+      {
+        role: "assistant",
+        content:
+          "前回の相談内容を読み込みました。ここから続きを一緒に整理していきましょう。\n\nその後、状況に変わったことはありますか？気になっていることがあれば、そのまま書いてください。",
+      },
+    ],
+    state: parsed.state,
+    lastCandidates: parsed.candidates,
+  };
+  saveSession(session);
+  renderMessages();
+  renderNotes();
+  input.focus();
+}
+
+importFileInput.addEventListener("change", async () => {
+  const file = importFileInput.files && importFileInput.files[0];
+  importFileInput.value = "";
+  if (file) await importConsultationFile(file);
+});
+
+messagesEl.addEventListener("click", (e) => {
+  if (e.target.id === "import-open") importFileInput.click();
+});
 
 function downloadFile(filename, text, mime) {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });
@@ -751,7 +936,7 @@ function downloadFile(filename, text, mime) {
 
 exportNoteButton.addEventListener("click", async () => {
   if (session.history.length === 0) {
-    alert("まだ会話がありません。相談を始めてから書き出してください。");
+    alert("まだ会話がありません。相談を始めてから保存してください。");
     return;
   }
   exportNoteButton.disabled = true;
@@ -772,7 +957,7 @@ exportNoteButton.addEventListener("click", async () => {
     console.error(e);
   } finally {
     exportNoteButton.disabled = false;
-    exportNoteButton.textContent = "相談内容を書き出す";
+    exportNoteButton.textContent = "相談内容を保存する";
   }
 
   const md = buildExportMarkdown(summary);

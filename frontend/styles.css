@@ -125,52 +125,32 @@ body {
   min-height: 0;
 }
 
-@media (max-width: 720px) {
-  .app {
-    padding: 12px 12px 8px;
-  }
 
-  .app-header h1 {
-    font-size: 1.3rem;
-  }
 
-  .app-header p {
-    margin-bottom: 8px;
-    font-size: 0.85rem;
-  }
+.notes-open-btn,
+.notes-close {
+  display: none;
+}
 
-  .app-header-row {
-    flex-wrap: wrap;
-  }
+.note-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 
-  .header-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
+.note-panel-head h2 {
+  margin: 0 0 8px;
+}
 
-  .new-session-btn {
-    padding: 6px 10px;
-    font-size: 0.78rem;
-  }
-
-  .guest-banner {
-    font-size: 0.75rem;
-    padding: 6px 10px;
-  }
-
-  .layout {
-    grid-template-columns: 1fr;
-    grid-auto-rows: min-content;
-    overflow-y: auto;
-  }
-
-  .chat-panel {
-    min-height: 72dvh;
-  }
-
-  .note-panel {
-    overflow-y: visible;
-  }
+.notes-close {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 6px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
 }
 
 .chat-panel, .note-panel {
@@ -518,6 +498,13 @@ body {
   font-family: inherit;
 }
 
+.welcome-resume {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
 .example-chip:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -630,4 +617,117 @@ body {
 .resource-how {
   color: var(--muted);
   line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+  .app {
+    padding: 12px 12px 8px;
+  }
+
+  .app-header h1 {
+    font-size: 1.3rem;
+  }
+
+  .app-header p {
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+  }
+
+  /* スマホのヘッダー: 1行目は「Kakekomi」とログイン/登録、2行目にボタンを並べる */
+  .app-header-row {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .app-header-row::after {
+    content: "";
+    order: 3;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .app-header-row > div:first-child {
+    order: 1;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .app-header h1 {
+    margin: 0;
+  }
+
+  .header-actions {
+    display: contents;
+  }
+
+  .account-area {
+    order: 2;
+  }
+
+  .header-actions .new-session-btn {
+    order: 4;
+    flex: 1 1 auto;
+    padding: 8px 4px;
+    font-size: 0.7rem;
+    text-align: center;
+  }
+
+  .guest-banner {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+
+  /* スマホ: 入力欄は画面の下に固定し、会話の部分だけがスクロールする。
+     まとめノートは、上の「まとめノート」ボタンで全画面に開く。 */
+  .app {
+    height: var(--app-h, 100dvh);
+  }
+
+  .app-header p:not(.guest-banner) {
+    display: none;
+  }
+
+  body.has-history .guest-banner {
+    display: none;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .chat-panel {
+    padding: 12px;
+  }
+
+  .notes-open-btn {
+    display: inline-block;
+  }
+
+  .notes-open-btn.has-notes::after {
+    content: "●";
+    color: var(--accent);
+    font-size: 0.7em;
+    margin-left: 4px;
+  }
+
+  .note-panel {
+    display: none;
+  }
+
+  .note-panel.open {
+    display: flex;
+    position: fixed;
+    inset: 8px;
+    z-index: 50;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  }
+
+  .notes-close {
+    display: inline-block;
+  }
 }

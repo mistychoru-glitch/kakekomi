@@ -16,14 +16,16 @@
       </div>
       <div class="header-actions">
         <div id="account-area" class="account-area"></div>
-        <button id="export-note" type="button" class="new-session-btn">相談内容を書き出す</button>
+        <button id="notes-open" type="button" class="new-session-btn notes-open-btn" aria-expanded="false" aria-controls="note-panel">まとめノート</button>
+        <button id="export-note" type="button" class="new-session-btn">相談内容を保存する</button>
         <button id="new-session" type="button" class="new-session-btn">新しい相談を始める</button>
       </div>
     </div>
     <div class="guest-banner">
       この相談内容はサーバーには一切保存されません。ページを離れたり「新しい相談を始める」を押すと消えます。
-      残しておきたい場合は「相談内容を書き出す」でファイルに保存してください。
+      残しておきたい場合は「相談内容を保存する」でファイルに保存してください。続きから相談したいときは、そのファイルを読み込めます。
     </div>
+    <input id="import-file" type="file" hidden />
   </header>
 
   <main class="layout">
@@ -40,8 +42,11 @@
       </p>
     </section>
 
-    <aside class="note-panel">
-      <h2>まとめノート</h2>
+    <aside class="note-panel" id="note-panel">
+      <div class="note-panel-head">
+        <h2>まとめノート</h2>
+        <button type="button" id="notes-close" class="notes-close">閉じる</button>
+      </div>
       <section id="situation" class="situation" hidden>
         <h3>いまの状況</h3>
         <dl id="situation-list" class="situation-list"></dl>
