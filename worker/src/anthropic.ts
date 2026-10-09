@@ -1,6 +1,22 @@
 import type { ChatTurn, StructuredState } from "./types";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
+
+// web検索で見に行ってよいサイト。検索結果に仕込まれた命令（間接のインジェクション）や、
+// 不正確な情報の入口を狭めるため、公式機関と、家賃の相場を載せる主要な不動産サイトに絞る。
+// go.jp=国の機関 / lg.jp=自治体 / ほかは、法テラス・社会福祉協議会・弁護士会・自立支援の情報サイト・不動産の相場
+export const SEARCH_ALLOWED_DOMAINS = [
+  "go.jp",
+  "lg.jp",
+  "houterasu.or.jp",
+  "shakyo.or.jp",
+  "nichibenren.or.jp",
+  "minna-tunagaru.jp",
+  "suumo.jp",
+  "homes.co.jp",
+  "athome.co.jp",
+  "chintai.net",
+];
 const ANTHROPIC_VERSION = "2023-06-01";
 
 interface AnthropicEnv {
@@ -13,7 +29,7 @@ interface AnthropicEnv {
 const STATE_EXTRACTION_TOOL = {
   name: "update_structured_state",
   description:
-    "直近のユーザー発言から読み取れる範囲だけ、構造化状態の差分を返す。読み取れない項目はキー自体を含めない。断定できない場合は無理に埋めない。",
+    "直近のユーザー発言から読み取れる範囲だけ、構造化状態の差分を返す。読み取れない項目はキー自体を含めない。断定できない場合は無理に埋めない。相談者が話していない地名・金額・日付などを、推測や例から作らない。",
   input_schema: {
     type: "object",
     properties: {
@@ -76,16 +92,16 @@ const STATE_EXTRACTION_TOOL = {
       payroll_urgency: { type: "boolean" },
       existing_advisors: { type: "string" },
       // 「状況の整理」カードに出す項目。相談者の発言どおりの表現で、短く（40文字以内）。
-      rent_amount: { type: "string", description: "家賃の金額（例: 月20万円）" },
-      area: { type: "string", description: "住んでいる/検討している地域（例: 西新宿）" },
+      rent_amount: { type: "string", description: "相談者が実際に話した家賃の金額。話していなければ、このキーを含めない" },
+      area: { type: "string", description: "相談者が実際に話した、住んでいる/検討している地域名。話していなければ、このキーを含めない（推測しない）" },
       notice_received: {
         type: "string",
-        description: "届いた督促・通知と期限（例: 大家からの督促状、今月末まで）",
+        description: "相談者が実際に話した、届いた督促・通知と期限。話していなければ、このキーを含めない",
       },
-      monthly_income_estimate: { type: "string", description: "月の収入（例: 手取り25万円）" },
-      income_type: { type: "string", description: "収入の形態（例: 会社員、フリーランス）" },
+      monthly_income_estimate: { type: "string", description: "相談者が実際に話した月の収入。話していなければ、このキーを含めない" },
+      income_type: { type: "string", description: "相談者が実際に話した収入の形態。話していなければ、このキーを含めない" },
       monthly_repayment_total: { type: "string", description: "月の返済額の合計" },
-      family_composition: { type: "string", description: "家族構成（例: 一人暮らし、子ども2人）" },
+      family_composition: { type: "string", description: "相談者が実際に話した家族構成。話していなければ、このキーを含めない" },
       cash_runway: { type: "string", description: "事業の資金がいつまで持つか" },
       critical_deadline: { type: "string", description: "事業の差し迫った期限（給与支払日など）" },
       debt_types: { type: "string", description: "事業の借入の種類" },
@@ -162,7 +178,9 @@ export async function generateReply(
     ],
     // 家賃相場・自治体の制度等、最新かつ具体的な情報が必要な場合にAI自身の判断で
     // 使わせるWeb検索ツール（SKILL.md 6章）。使いすぎないよう上限を設ける。
-    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }],
+    tools: [
+      { type: "web_search_20250305", name: "web_search", max_uses: 3, allowed_domains: SEARCH_ALLOWED_DOMAINS },
+    ],
   };
 
   const res = await fetch(API_URL, {

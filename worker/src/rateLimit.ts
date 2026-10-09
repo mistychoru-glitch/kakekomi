@@ -129,4 +129,9 @@ export async function recordFailure(
   windowSeconds: number
 ): Promise<void> {
   await bump(env.DB, key, windowSeconds);
+  // 期限が1日以上前に切れた行を、ときどき消す。IDを変えながらの大量の試行で、表が膨らみ続けないように
+  // （恒久の上限の行は、期限がずっと先なので消えない）
+  if (Math.random() < 0.02) {
+    await env.DB.prepare("DELETE FROM rate_limits WHERE expires_at < ?").bind(nowSeconds() - 86400).run();
+  }
 }

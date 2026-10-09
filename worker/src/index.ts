@@ -7,6 +7,7 @@ import { markActionsPresented, mergeStatePatch, sanitizeClientState } from "./st
 import { INJECTION_REPLY, looksLikeInjection, neutralizeTags, sanitizeReply } from "./guard";
 import { sanitizeHistory } from "./history";
 import { signText } from "./sign";
+import { isCommonPassword } from "./passwords";
 import type { ChatRequestBody, ChatResponseBody } from "./types";
 import { timingSafeEqualStrings } from "./auth";
 import { RESOURCES } from "./resources";
@@ -258,10 +259,11 @@ const EMAIL_MAX = 254;
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 128;
 
-function passwordError(password: string): string | null {
+function passwordError(password: string, loginId = ""): string | null {
   if (password.length < PASSWORD_MIN) return "password_too_short";
   if (password.length > PASSWORD_MAX) return "password_too_long";
   if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return "password_too_weak";
+  if (isCommonPassword(password, loginId)) return "password_common";
   return null;
 }
 
@@ -289,7 +291,7 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
   if (displayName.length < 1 || displayName.length > 50) {
     return json({ error: "display_name_invalid" }, 400);
   }
-  const pwError = passwordError(password);
+  const pwError = passwordError(password, loginId);
   if (pwError) {
     return json({ error: pwError }, 400);
   }
@@ -336,6 +338,13 @@ async function handleLogin(req: Request, env: Env): Promise<Response> {
     return json({ error: "invalid_credentials" }, 401);
   }
 
+  // 同じアカウントへの連続失敗は、IPが変わっても止める（複数のIPからの総当たり対策）。
+  // 存在するIDかどうかに関わらず、同じように数える（ロックの有無から、IDの有無を探られないため）。
+  const lockKey = `login_fail:${loginId}`;
+  if (await isLocked(env, lockKey, LOGIN_FAIL_LIMIT)) {
+    return json({ error: "login_locked" }, 429);
+  }
+
   // 開発者アカウント: ID・パスワードはシークレットで持ち、ソースコードには書かない
   const adminId = adminLoginId(env);
   const user =
@@ -345,6 +354,7 @@ async function handleLogin(req: Request, env: Env): Promise<Response> {
         : null
       : await verifyLogin(env.DB, loginId, password);
   if (!user) {
+    await recordFailure(env, lockKey, LOGIN_FAIL_WINDOW);
     return json({ error: "invalid_credentials" }, 401);
   }
   const token = await createSession(env.DB, user.id);
@@ -362,6 +372,8 @@ async function handleMe(req: Request, env: Env): Promise<Response> {
   return json({ loginId: user.loginId, displayName: user.displayName, planStatus: user.planStatus });
 }
 
+const LOGIN_FAIL_LIMIT = 10;
+const LOGIN_FAIL_WINDOW = 3600;
 const RESET_FAIL_LIMIT = 8;
 const RESET_FAIL_WINDOW = 3600;
 
@@ -378,7 +390,7 @@ async function handlePasswordReset(req: Request, env: Env): Promise<Response> {
   const recoveryCode = body.recovery_code ?? "";
   const newPassword = body.new_password ?? "";
 
-  const pwError = passwordError(newPassword);
+  const pwError = passwordError(newPassword, loginId);
   if (pwError) {
     return json({ error: pwError }, 400);
   }

@@ -690,6 +690,12 @@ document.getElementById("recovery-download").addEventListener("click", () => {
 });
 
 function authErrorMessage(res, data) {
+  if (data.error === "login_locked") {
+    return "ログインの失敗が続いたため、一時的に受け付けられません。1時間ほどあけてからお試しください。";
+  }
+  if (data.error === "reset_locked") {
+    return "再設定の失敗が続いたため、一時的に受け付けられません。1時間ほどあけてからお試しください。";
+  }
   if (res.status === 429) {
     return data.error === "registration_limit_reached"
       ? "このネットワークからの登録数が上限に達しています。"
@@ -712,6 +718,8 @@ function authErrorMessage(res, data) {
       return "パスワードは8文字以上にしてください。";
     case "password_too_weak":
       return "パスワードは英字と数字の両方を含めてください。";
+    case "password_common":
+      return "このパスワードは、推測されやすいため使えません。ほかの文字や、長さを足して、別のものにしてください。";
     case "password_too_long":
       return "パスワードは128文字以内にしてください。";
     default:
