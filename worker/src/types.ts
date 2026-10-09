@@ -8,6 +8,7 @@ export type PsychologicalState = "panic" | "anxious" | "calm" | "unknown";
 export type PersonalSubCategory =
   | "debt"
   | "housing"
+  | "mortgage"
   | "income_loss"
   | "tax_or_insurance_arrears"
   | "other";
@@ -41,6 +42,10 @@ export interface PersonalState {
   welfare_rejected_due_to_capacity: boolean | null; // 稼働能力等を理由に生活保護却下
   rent_above_regional_cap_suspected: boolean | null;
   cannot_afford_moving_cost: boolean | null;
+  // mortgage（住宅ローン）サブ状態
+  mortgage_months_behind: number | null; // 滞納している月数
+  mortgage_acceleration_notified: boolean | null; // 一括返済の請求・期限の利益の喪失の通知が届いた
+  mortgage_auction_started: boolean | null; // 競売の手続き（競売開始決定の通知など）が始まっている
 }
 
 export interface BusinessState {
@@ -92,6 +97,9 @@ export function createInitialState(): StructuredState {
       welfare_rejected_due_to_capacity: null,
       rent_above_regional_cap_suspected: null,
       cannot_afford_moving_cost: null,
+      mortgage_months_behind: null,
+      mortgage_acceleration_notified: null,
+      mortgage_auction_started: null,
     },
     business: {
       cash_runway: null,

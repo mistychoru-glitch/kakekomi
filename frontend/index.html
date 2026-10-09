@@ -66,6 +66,7 @@
       <div id="notes" class="notes">
         <p class="notes-empty">会話が進むと、ここに整理された内容が付箋のように表示されます。</p>
       </div>
+      <button type="button" id="call-script-open" class="call-script-btn" hidden>電話で話す内容をつくる</button>
       <details class="resources">
         <summary>相談窓口の一覧</summary>
         <div id="resources-list" class="resources-list"><p class="notes-empty">読み込み中…</p></div>
@@ -136,6 +137,19 @@
   </div>
 </div>
 
+<!-- 電話の台本 -->
+<div id="call-script-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <h3 id="call-script-title">電話の台本</h3>
+    <p class="modal-note">いまの状況から作った、電話で話す内容のメモです。読み上げるだけで大丈夫です。</p>
+    <pre id="call-script-text" class="call-script-text"></pre>
+    <div class="modal-actions">
+      <button type="button" class="modal-cancel" id="call-script-copy">コピー</button>
+      <button type="button" class="modal-primary" data-close>閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- 相談内容の保存方法の選択 -->
 <div id="save-modal" class="modal-overlay" hidden>
   <div class="modal">
@@ -176,6 +190,7 @@
   </div>
 </div>
 
+<script src="call-script.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

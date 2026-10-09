@@ -10,6 +10,9 @@ const PERSONAL_FIELDS: Record<string, FieldType> = {
   welfare_rejected_due_to_capacity: "boolean",
   rent_above_regional_cap_suspected: "boolean",
   cannot_afford_moving_cost: "boolean",
+  mortgage_months_behind: "integer",
+  mortgage_acceleration_notified: "boolean",
+  mortgage_auction_started: "boolean",
   collection_fear_strong: "boolean",
   already_consulted_no_resolution: "boolean",
   checked_credit_bureau_total_unclear: "boolean",
@@ -39,7 +42,14 @@ const COMMON_ENUMS: Record<string, readonly string[]> = {
   psychological_state: ["panic", "anxious", "calm", "unknown"],
 };
 
-const SUB_CATEGORIES = ["debt", "housing", "income_loss", "tax_or_insurance_arrears", "other"];
+const SUB_CATEGORIES = [
+  "debt",
+  "housing",
+  "mortgage",
+  "income_loss",
+  "tax_or_insurance_arrears",
+  "other",
+];
 
 const MAX_TEXT = 80;
 

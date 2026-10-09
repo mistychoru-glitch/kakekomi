@@ -69,6 +69,56 @@ function housingCandidates(state: StructuredState): CandidateAction[] {
   return out;
 }
 
+function mortgageCandidates(state: StructuredState): CandidateAction[] {
+  const p = state.personal;
+  const out: CandidateAction[] = [];
+
+  if (p.mortgage_auction_started) {
+    out.push({
+      id: "mortgage_auction_urgent",
+      action: "至急、法テラスや弁護士に相談する（競売の手続きが始まっている場合）",
+      caveat:
+        "競売は手続きが進み続けるため、時間が限られます。取れる手段や期限は個別の状況で変わるので、断定はできません。早いほど選択肢が残ります。",
+      priority: 1,
+    });
+  }
+  if (p.notice_type_unknown) {
+    out.push({
+      id: "mortgage_confirm_notice_type",
+      action: "届いた書面の種類を確認する（督促状／催告書／一括返済の通知／競売の通知）",
+      caveat:
+        "書面によって、残された時間と取れる手段が大きく変わります。送り主（借入先か、保証会社か、裁判所か）も一緒に確認してください。",
+      priority: 1,
+    });
+  }
+  if (p.mortgage_acceleration_notified && !p.mortgage_auction_started) {
+    out.push({
+      id: "mortgage_acceleration_contact",
+      action: "借入先と保証会社に、今の状況と今後の手続きの見通しを確認する。あわせて法テラスなどにも相談する",
+      caveat:
+        "一括返済を求められる段階では、そのあと保証会社が代わりに払い、競売の申立てに進むことが多いとされています（期間は契約や会社で異なります）。連絡を避けるより、早く動いた方が選択肢が残ります。",
+      priority: 2,
+    });
+  }
+  if (!p.mortgage_acceleration_notified && !p.mortgage_auction_started) {
+    out.push({
+      id: "mortgage_consult_lender",
+      action: "借入先（銀行など）に、返済条件の変更を早めに相談する",
+      caveat:
+        "返済期間の延長や、一定期間の返済額の見直しに応じてくれる場合があります。応じるかどうかは金融機関の判断で、総返済額が増えることもあります。滞納が長引くほど、選べる方法は減ります。",
+      priority: 2,
+    });
+  }
+  out.push({
+    id: "mortgage_consult_legal",
+    action: "法テラスなどで、住宅ローンの整理の方法（任意売却・個人再生など）を相談する",
+    caveat:
+      "任意売却は、競売より高く売れる場合がありますが、合意や条件が必要です。個人再生は、要件を満たせば住宅を残せる場合があります。どれが合うかは弁護士に確認してください。任意売却を扱う不動産会社は、費用と契約内容を必ず確かめ、中立の専門家にも相談してから選んでください。",
+    priority: 3,
+  });
+  return out;
+}
+
 function debtCandidates(state: StructuredState): CandidateAction[] {
   const p = state.personal;
   const out: CandidateAction[] = [];
@@ -154,6 +204,9 @@ export function selectCandidateActions(
   if (state.category === "personal") {
     if (state.personal.sub_category.includes("housing")) {
       all = all.concat(housingCandidates(state));
+    }
+    if (state.personal.sub_category.includes("mortgage")) {
+      all = all.concat(mortgageCandidates(state));
     }
     if (state.personal.sub_category.includes("debt")) {
       all = all.concat(debtCandidates(state));

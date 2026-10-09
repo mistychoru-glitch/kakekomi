@@ -161,6 +161,7 @@ function renderMessages() {
 
 const THEME_LABELS = {
   housing: "住まい・家賃",
+  mortgage: "住宅ローン",
   debt: "借金・返済",
   income_loss: "収入の減少",
   tax_or_insurance_arrears: "税・保険料の滞納",
@@ -175,6 +176,8 @@ const FLAG_LABELS = {
   cannot_afford_moving_cost: "転居費用が用意できない",
   already_consulted_no_resolution: "相談したが解決しなかった",
   payroll_urgency: "給与の支払いが迫っている",
+  mortgage_acceleration_notified: "一括返済を求める通知（期限の利益の喪失）が届いている",
+  mortgage_auction_started: "競売の手続きが始まっている",
 };
 
 function situationRows(state) {
@@ -195,6 +198,7 @@ function situationRows(state) {
   add("収入", [p.monthly_income_estimate, p.income_type].filter(Boolean).join("（") + (p.monthly_income_estimate && p.income_type ? "）" : ""));
   add("家族", p.family_composition);
   add("借入", p.debt_count ? `${p.debt_count}件` : null);
+  add("住宅ローンの滞納", p.mortgage_months_behind ? `${p.mortgage_months_behind}か月分` : null);
   add("月の返済額", p.monthly_repayment_total);
   add("届いた通知・期限", p.notice_received);
   add("資金の見通し", b.cash_runway);
@@ -223,12 +227,16 @@ function renderSituation() {
 
 // ---- 相談窓口の一覧（サーバーの一覧をそのまま表示。AIが案内する番号と同じもの） ----
 
+let resourcesCache = [];
+
 async function loadResources() {
   const listEl = document.getElementById("resources-list");
   try {
     const res = await fetch(`${API_BASE}/api/resources`, { headers: devHeaders() });
     if (!res.ok) throw new Error("failed");
     const { resources } = await res.json();
+    resourcesCache = resources;
+    renderNotes();
     listEl.innerHTML = resources
       .map((r) => {
         const phone = r.phone
@@ -249,12 +257,47 @@ async function loadResources() {
   }
 }
 
+const callScriptOpenButton = document.getElementById("call-script-open");
+
+function currentCallScript() {
+  return window.KakekomiCallScript
+    ? window.KakekomiCallScript.buildCallScript(session.state, resourcesCache)
+    : null;
+}
+
+callScriptOpenButton.addEventListener("click", () => {
+  const script = currentCallScript();
+  if (!script) return;
+  document.getElementById("call-script-title").textContent = script.title;
+  document.getElementById("call-script-text").textContent = script.text;
+  openModal("call-script-modal");
+});
+
+document.getElementById("call-script-copy").addEventListener("click", async (e) => {
+  const text = document.getElementById("call-script-text").textContent;
+  const button = e.currentTarget;
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = "コピーしました";
+  } catch (err) {
+    // クリップボードが使えないときは、文面を選択状態にして、手でコピーしてもらう
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById("call-script-text"));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    button.textContent = "選択しました（コピーしてください）";
+  }
+  setTimeout(() => (button.textContent = "コピー"), 2500);
+});
+
 function renderNotes() {
   renderSituation();
   const candidates = session.lastCandidates || [];
   // スマホの「まとめノート」ボタンに、中身があることを示す印を付ける
   const hasSituation = !document.getElementById("situation").hidden;
   notesOpenButton.classList.toggle("has-notes", hasSituation || candidates.length > 0);
+  callScriptOpenButton.hidden = !currentCallScript();
   document.getElementById("notes-heading").hidden = candidates.length === 0;
   if (candidates.length === 0) {
     notesEl.innerHTML =
@@ -1030,6 +1073,12 @@ function buildPrintSheet(summary) {
       item.append(a, b);
       sheet.appendChild(item);
     }
+  }
+
+  const script = currentCallScript();
+  if (script) {
+    add("h2", script.title);
+    add("p", script.text, "print-script");
   }
 
   add(

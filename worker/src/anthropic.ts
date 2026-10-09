@@ -33,6 +33,7 @@ const STATE_EXTRACTION_TOOL = {
           enum: [
             "debt",
             "housing",
+            "mortgage",
             "income_loss",
             "tax_or_insurance_arrears",
             "other",
@@ -46,6 +47,15 @@ const STATE_EXTRACTION_TOOL = {
       welfare_rejected_due_to_capacity: { type: "boolean" },
       rent_above_regional_cap_suspected: { type: "boolean" },
       cannot_afford_moving_cost: { type: "boolean" },
+      mortgage_months_behind: { type: "integer", description: "住宅ローンを滞納している月数" },
+      mortgage_acceleration_notified: {
+        type: "boolean",
+        description: "住宅ローンの一括返済の請求・期限の利益の喪失の通知が届いた",
+      },
+      mortgage_auction_started: {
+        type: "boolean",
+        description: "住宅の競売の手続き（競売開始決定の通知など）が始まっている",
+      },
       collection_fear_strong: { type: "boolean" },
       already_consulted_no_resolution: { type: "boolean" },
       checked_credit_bureau_total_unclear: { type: "boolean" },
@@ -86,7 +96,7 @@ export async function extractStatePatch(
     max_tokens: 512,
     system:
       "あなたは会話ログから構造化状態の差分だけを抽出するアシスタントです。推測で断定せず、発言から読み取れる範囲のみ update_structured_state ツールを呼び出してください。" +
-      "分類のルール: 家賃・大家・管理会社・賃貸・住まいに触れていれば sub_category に housing を含める。借入・カード・ローン・消費者金融・返済に触れていれば debt を含める。両方に当てはまるなら両方入れる。" +
+      "分類のルール: 家賃・大家・管理会社・賃貸・住まいに触れていれば sub_category に housing を含める。借入・カード・ローン・消費者金融・返済に触れていれば debt を含める。自宅・持ち家・マイホームの住宅ローンに触れていれば、debt ではなく mortgage を含める（家賃の housing とは別）。複数に当てはまるなら、すべて入れる。" +
       "「督促状が届いた」とだけ言われ、誰からの何の督促状かが分からないときは、housing や debt を決めつけず、notice_type_unknown を true にする（ただし、督促状の種類が不明でも、家賃の金額や住まいの話が出ていれば housing は含める）。",
     messages: [
       ...recentHistory.map((t) => ({ role: t.role, content: t.content })),
