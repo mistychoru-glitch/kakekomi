@@ -31,10 +31,7 @@
         <button id="new-session" type="button" class="new-session-btn">新しい相談を始める</button>
       </div>
     </div>
-    <div class="guest-banner">
-      この相談内容はサーバーには一切保存されません。ページを離れたり「新しい相談を始める」を押すと消えます。
-      残しておきたい場合は「相談内容を保存する」でファイルに保存してください。続きから相談したいときは、そのファイルを読み込めます。
-    </div>
+    <div class="guest-banner"><span class="banner-text"><span class="nb">この相談内容は</span><span class="nb">サーバーには</span><span class="nb">一切保存されません。</span><span class="nb">ページを離れたり</span><span class="nb">「新しい相談を始める」を</span><span class="nb">押すと消えます。</span><span class="nb">残しておきたい場合は</span><span class="nb">「相談内容を保存する」で</span><span class="nb">ファイルに保存してください。</span><span class="nb">続きから相談したいときは、</span><span class="nb">そのファイルを</span><span class="nb">読み込めます。</span></span></div>
     <input id="import-file" type="file" hidden />
   </header>
 
@@ -42,7 +39,7 @@
     <section class="chat-panel">
       <div id="messages" class="messages" aria-live="polite"></div>
       <form id="composer" class="composer">
-        <textarea id="input" placeholder="今の状況を、思うままに書いてみてください（Enterで送信、Shift+Enterで改行）" rows="3" maxlength="2000"></textarea>
+        <textarea id="input" placeholder="今の状況を、思うままに書いてください" rows="3" maxlength="2000"></textarea>
         <button type="submit">送る</button>
       </form>
       <p class="chat-footnote">

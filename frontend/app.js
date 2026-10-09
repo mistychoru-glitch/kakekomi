@@ -101,22 +101,26 @@ async function authedFetch(path, options = {}) {
 
 // ---- 画面描画 ----
 
-// "|" は、言葉のまとまりの区切り（画面が狭いとき、ここで折り返す）。入力欄に入れるときは取り除く。
+// "/" は、狭い画面での改行の位置（2行の長さをそろえる）。"|" は、言葉のまとまりの区切り（途中で切らない）。
+// 入力欄に入れるときは、どちらも取り除く。
 const EXAMPLE_PROMPTS = [
-  "お金のことで|悩んでいるけれど、|誰にも|言えずにいます",
-  "家賃を滞納してしまい、|大家さんから|督促状が届きました",
-  "借金の返済が苦しくて、|毎月の支払いに|追われています",
-  "収入が減って、|今の家賃を|払い続けられるか|不安です",
-  "事業の資金繰りが厳しく、|来月の支払いが|心配です",
+  "お金のことで|悩んでいるけれど、/誰にも|言えずにいます",
+  "家賃を滞納してしまい、/大家さんから|督促状が届きました",
+  "借金の返済が苦しくて、/毎月の支払いに|追われています",
+  "収入が減って、|今の家賃を/払い続けられるか|不安です",
+  "事業の資金繰りが厳しく、/来月の支払いが|心配です",
 ];
 
 // 日本語は、画面が狭いと単語の途中で折り返されるので、言葉のまとまりごとに折り返す。
 // "|" で区切った部分は、途中で切れない。
 function phrases(text) {
-  return text
-    .split("|")
-    .map((p) => `<span class="nb">${p}</span>`)
-    .join("");
+  const wrapPhrases = (line) =>
+    line
+      .split("|")
+      .map((p) => `<span class="nb">${p}</span>`)
+      .join("");
+  // "/" の位置では、狭い画面でだけ改行する（広い画面では1行のまま）
+  return text.split("/").map(wrapPhrases).join('<br class="soft-br">');
 }
 
 function renderWelcome() {
@@ -132,7 +136,7 @@ function renderWelcome() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "example-chip";
-    const plain = text.replace(/\|/g, "");
+    const plain = text.replace(/[|/]/g, "");
     btn.innerHTML = phrases(text);
     btn.addEventListener("click", () => {
       input.value = plain;
@@ -416,8 +420,8 @@ input.addEventListener("input", autoGrow);
 // スマホ・タブレット（指で操作する端末）では、Enterは改行にして、送信は「送る」ボタンだけにする。
 const touchOnly = window.matchMedia("(hover: none) and (pointer: coarse)");
 
-const PLACEHOLDER_DESKTOP = "今の状況を、思うままに書いてみてください（Enterで送信、Shift+Enterで改行）";
-const PLACEHOLDER_TOUCH = "今の状況を、思うままに書いてください（送信は右のボタン）";
+const PLACEHOLDER_DESKTOP = "今の状況を、思うままに書いてください\n（Enterで送信、Shift+Enterで改行）";
+const PLACEHOLDER_TOUCH = "思うままに、書いてください";
 
 function updatePlaceholder() {
   input.placeholder = touchOnly.matches ? PLACEHOLDER_TOUCH : PLACEHOLDER_DESKTOP;
