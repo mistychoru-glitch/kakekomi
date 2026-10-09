@@ -178,6 +178,7 @@ const FLAG_LABELS = {
   payroll_urgency: "給与の支払いが迫っている",
   mortgage_acceleration_notified: "一括返済を求める通知（期限の利益の喪失）が届いている",
   mortgage_auction_started: "競売の手続きが始まっている",
+  tax_seizure_notice: "差押えの予告・差押えが来ている",
 };
 
 function situationRows(state) {
@@ -199,6 +200,13 @@ function situationRows(state) {
   add("家族", p.family_composition);
   add("借入", p.debt_count ? `${p.debt_count}件` : null);
   add("住宅ローンの滞納", p.mortgage_months_behind ? `${p.mortgage_months_behind}か月分` : null);
+  const arrears = [
+    p.arrears_national_tax && "国税（所得税・消費税など）",
+    p.arrears_local_tax && "住民税などの地方税",
+    p.arrears_health_insurance && "国民健康保険料",
+    p.arrears_pension && "国民年金保険料",
+  ].filter(Boolean);
+  add("滞納している税・保険料", arrears.length ? arrears.join("、") : null);
   add("月の返済額", p.monthly_repayment_total);
   add("届いた通知・期限", p.notice_received);
   add("資金の見通し", b.cash_runway);

@@ -46,6 +46,12 @@ export interface PersonalState {
   mortgage_months_behind: number | null; // 滞納している月数
   mortgage_acceleration_notified: boolean | null; // 一括返済の請求・期限の利益の喪失の通知が届いた
   mortgage_auction_started: boolean | null; // 競売の手続き（競売開始決定の通知など）が始まっている
+  // tax_or_insurance_arrears（税・保険料の滞納）サブ状態
+  arrears_national_tax: boolean | null; // 国税（所得税・消費税など）の滞納
+  arrears_local_tax: boolean | null; // 地方税（住民税など）の滞納
+  arrears_health_insurance: boolean | null; // 国民健康保険料の滞納
+  arrears_pension: boolean | null; // 国民年金保険料の未納
+  tax_seizure_notice: boolean | null; // 差押えの予告・差押えの通知が届いた、または差押えを受けた
 }
 
 export interface BusinessState {
@@ -100,6 +106,11 @@ export function createInitialState(): StructuredState {
       mortgage_months_behind: null,
       mortgage_acceleration_notified: null,
       mortgage_auction_started: null,
+      arrears_national_tax: null,
+      arrears_local_tax: null,
+      arrears_health_insurance: null,
+      arrears_pension: null,
+      tax_seizure_notice: null,
     },
     business: {
       cash_runway: null,

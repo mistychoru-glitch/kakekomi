@@ -41,6 +41,22 @@
         "収入・資産・ほかの借入が分かる一覧",
       ],
     },
+    tax: {
+      phrase: "税金や保険料の滞納",
+      target: "届いた書面に書かれた担当窓口（税務署・市区町村の税や国民健康保険の窓口・年金事務所）",
+      resourceId: null,
+      asks: [
+        "分割で納めたり、納付を待ってもらったりする制度はありますか",
+        "自分の場合は、対象になりますか。どんな書類が必要ですか",
+        "差押えを避けるために、いつまでに、何をすればよいですか",
+      ],
+      prepare: [
+        "届いた書面すべて（納付書・督促状・差押えの予告など）",
+        "収入と毎月の支出が分かるもの",
+        "預金通帳など、財産の状況が分かるもの",
+        "本人確認書類",
+      ],
+    },
     debt: {
       phrase: "借金の返済",
       target: "法テラス（サポートダイヤル）",
@@ -65,6 +81,26 @@
     },
   };
 
+  function hasTax(p) {
+    return !!(
+      (p.sub_category || []).includes("tax_or_insurance_arrears") ||
+      p.arrears_national_tax ||
+      p.arrears_local_tax ||
+      p.arrears_health_insurance ||
+      p.arrears_pension
+    );
+  }
+
+  // 滞納している種類から、かける先を具体的にする
+  function taxTarget(p) {
+    const targets = [];
+    if (p.arrears_national_tax) targets.push("税務署（徴収担当）");
+    if (p.arrears_local_tax) targets.push("市区町村の税の窓口（納税課・収納課など）");
+    if (p.arrears_health_insurance) targets.push("市区町村の国民健康保険の窓口");
+    if (p.arrears_pension) targets.push("年金事務所、または市区町村の国民年金の窓口");
+    return targets.length > 0 ? targets.join("／") : null;
+  }
+
   function pickTopic(state) {
     if (!state) return null;
     const p = state.personal || {};
@@ -73,8 +109,10 @@
     if (subs.includes("mortgage")) {
       return p.mortgage_auction_started || p.mortgage_acceleration_notified ? "mortgage_urgent" : "mortgage";
     }
+    if (hasTax(p) && p.tax_seizure_notice) return "tax";
     if (subs.includes("housing")) return "housing";
     if (subs.includes("debt")) return "debt";
+    if (hasTax(p)) return "tax";
     return null;
   }
 
@@ -101,6 +139,18 @@
       add(p.mortgage_auction_started && "競売の手続きが始まっています");
       add(income && `収入は、${income}です`);
       add(p.family_composition && `家族は、${p.family_composition}です`);
+    } else if (topic === "tax") {
+      const kinds = [
+        p.arrears_national_tax && "国税（所得税・消費税など）",
+        p.arrears_local_tax && "住民税などの地方税",
+        p.arrears_health_insurance && "国民健康保険料",
+        p.arrears_pension && "国民年金保険料",
+      ].filter(Boolean);
+      add(kinds.length > 0 && `滞納しているのは、${kinds.join("、")}です`);
+      add(p.notice_received && `届いているのは、${p.notice_received}です`);
+      add(p.tax_seizure_notice && !String(p.notice_received || "").includes("差押") && "差押えの予告、または差押えの通知が来ています");
+      add(income && `収入は、${income}です`);
+      add(p.family_composition && `家族は、${p.family_composition}です`);
     } else if (topic === "debt") {
       add(p.debt_count && `借入は${p.debt_count}件あります`);
       add(p.monthly_repayment_total && `毎月の返済は、${p.monthly_repayment_total}です`);
@@ -121,15 +171,17 @@
     const topicKey = pickTopic(state);
     if (!topicKey) return null;
     const topic = TOPICS[topicKey];
-    const resource = (resources || []).find((r) => r.id === topic.resourceId);
+    const resource = topic.resourceId ? (resources || []).find((r) => r.id === topic.resourceId) : null;
+    const p = state.personal || {};
+    const target = (topicKey === "tax" && taxTarget(p)) || topic.target;
 
     const lines = [];
     lines.push("【電話をかける先】");
-    lines.push(topic.target);
+    lines.push(target);
     if (resource && resource.phone) {
       lines.push(`電話番号: ${resource.phone}${resource.hours ? `（${resource.hours}）` : ""}`);
     } else {
-      lines.push("電話番号は、届いた書面や、お住まいの役所の案内で確認してください。");
+      lines.push("電話番号は、届いた書面や、お住まいの役所・事務所の案内で確認してください。");
     }
     lines.push("");
     lines.push("【最初の一言】");

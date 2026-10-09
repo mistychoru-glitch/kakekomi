@@ -119,6 +119,97 @@ function mortgageCandidates(state: StructuredState): CandidateAction[] {
   return out;
 }
 
+function hasTaxArrears(state: StructuredState): boolean {
+  const p = state.personal;
+  return (
+    p.sub_category.includes("tax_or_insurance_arrears") ||
+    !!(p.arrears_national_tax || p.arrears_local_tax || p.arrears_health_insurance || p.arrears_pension)
+  );
+}
+
+function taxCandidates(state: StructuredState): CandidateAction[] {
+  const p = state.personal;
+  const out: CandidateAction[] = [];
+
+  if (p.tax_seizure_notice) {
+    out.push({
+      id: "tax_seizure_contact_now",
+      action: "至急、届いた書面の送り主（税務署・市区町村・年金事務所など）に連絡して、分割や猶予の相談をする",
+      caveat:
+        "差押えは、給与や預金などに及ぶことがあります。連絡して事情を伝えると、納める方法を一緒に考えてもらえる場合があります。要件があり、断定はできませんが、早いほど選択肢が残ります。",
+      priority: 1,
+    });
+  }
+  if (p.notice_type_unknown) {
+    out.push({
+      id: "tax_confirm_notice_type",
+      action: "届いた書面の種類と送り主を確認する（納付書／督促状／差押えの予告、税務署か市区町村か年金事務所か）",
+      caveat: "書面によって、残された時間と相談先が変わります。書面の連絡先に書かれた担当窓口が、最初の相談先です。",
+      priority: 1,
+    });
+  }
+  if (p.arrears_national_tax) {
+    out.push({
+      id: "tax_national_consult",
+      action: "税務署に、納税の猶予・分割納付（換価の猶予）の相談をする",
+      caveat:
+        "事業や生活の維持が難しくなる場合などに、要件を満たせば、待ってもらえたり分割で納められたりすることがあります。申請できる期間が決まっているものがあるので、早めに。使えるかは税務署で確認してください。",
+      priority: 2,
+    });
+  }
+  if (p.arrears_local_tax) {
+    out.push({
+      id: "tax_local_consult",
+      action: "お住まいの市区町村の税の窓口（納税課・収納課など）に、分割や猶予の相談をする",
+      caveat: "制度や運用は自治体ごとに異なります。滞納が続くと、給与や預金の差押えに進むことがあります。",
+      priority: 2,
+    });
+  }
+  if (p.arrears_health_insurance) {
+    out.push({
+      id: "tax_health_insurance_consult",
+      action: "市区町村の国民健康保険の窓口に、保険料の減免や分割などを相談する",
+      caveat:
+        "特別な事情があるときは、減免や納付の猶予が受けられる場合があります。滞納が続くと、保険証の扱いや、医療費の自己負担に影響が出ることがあります。",
+      priority: 2,
+    });
+  }
+  if (p.arrears_pension) {
+    out.push({
+      id: "tax_pension_exemption",
+      action: "年金事務所か、市区町村の国民年金の窓口で、保険料の免除・納付猶予を申請する",
+      caveat:
+        "申請して承認されると、納付が免除・猶予されます。さかのぼって申請できる期間には限りがあります。本人の所得だけでなく、世帯主や配偶者の所得も審査されます。猶予の期間は、年金額には反映されません。",
+      priority: 2,
+    });
+  }
+  const kindKnown =
+    p.arrears_national_tax || p.arrears_local_tax || p.arrears_health_insurance || p.arrears_pension;
+  if (!kindKnown && !p.tax_seizure_notice && !p.notice_type_unknown) {
+    out.push({
+      id: "tax_consult_office",
+      action: "届いた書面の送り主の窓口（税務署・市区町村・年金事務所）に、分割や猶予の相談をする",
+      caveat:
+        "どの税金や保険料かで窓口が変わります。書面に書かれた担当窓口に、まず連絡してください。連絡を避けるほど、選べる方法は減ります。",
+      priority: 2,
+    });
+  }
+  out.push({
+    id: "tax_not_discharged",
+    action: "税金や保険料は、借金の整理（自己破産など）では、一般に免除されないことを知っておく",
+    caveat:
+      "借金と同じ方法では消えないのが一般的です。だからこそ、窓口で分割や猶予を早めに相談することが大切です。個別の扱いは、弁護士などに確認してください。",
+    priority: 3,
+  });
+  out.push({
+    id: "tax_consult_jiritsu",
+    action: "生活全体が苦しいときは、市区町村の自立相談支援機関にも相談する",
+    caveat: "支援員が家計や暮らし全体を一緒に整理してくれます。税や保険料の窓口への相談と、並行して使えます。",
+    priority: 4,
+  });
+  return out;
+}
+
 function debtCandidates(state: StructuredState): CandidateAction[] {
   const p = state.personal;
   const out: CandidateAction[] = [];
@@ -213,6 +304,10 @@ export function selectCandidateActions(
     }
   } else if (state.category === "business") {
     all = all.concat(businessCandidates(state));
+  }
+  // 税・保険料の滞納は、個人でも事業でも、同じ窓口と制度になる
+  if (hasTaxArrears(state)) {
+    all = all.concat(taxCandidates(state));
   }
 
   // 既出の候補は除外（presented_actions と id で重複判定）
