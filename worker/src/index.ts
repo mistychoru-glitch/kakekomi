@@ -1,7 +1,7 @@
 import { extractStatePatch, generateReply, summarizeConsultation } from "./anthropic";
 import { buildSystemPrompt, buildCrisisResponse } from "./prompt";
 import { selectCandidateActions } from "./rules";
-import { recordStat } from "./stats";
+import { recordStatFor } from "./stats";
 import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch, sanitizeClientState } from "./state";
 import { ALLOWED_PHONES, INJECTION_REPLY, looksLikeInjection, neutralizeTags, sanitizeReply } from "./guard";
@@ -35,6 +35,7 @@ export interface Env {
   CHAT_SIGNING_KEY?: string; // AIの返信の署名に使う鍵（会話の履歴への、偽のAI発言の混入を防ぐ）
   ANTHROPIC_MODEL: string;
   DEV_BYPASS_KEY?: string;
+  STATS_EXCLUDE_KEY?: string; // 動作確認を集計から除くための目印（回数制限は外さない）
   DAILY_AI_LIMIT?: string;
   ADMIN_LOGIN_ID?: string;
   ADMIN_PASSWORD?: string;
@@ -76,7 +77,7 @@ function corsHeaders(req: Request): Record<string, string> {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "content-type, authorization, x-kakekomi-dev-key",
+    "access-control-allow-headers": "content-type, authorization, x-kakekomi-dev-key, x-kakekomi-test-key",
     vary: "origin",
   };
 }
@@ -145,7 +146,7 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   // 2章: 緊急性の無条件上書きレイヤー（最優先・キーワードベースで即判定）。
   // AIを呼ばない固定応答なので、回数制限や文字数制限よりも先に必ず判定する。
   if (detectCrisis(rawMessage)) {
-    await recordStat(env.DB, "crisis");
+    await recordStatFor(env, req, "crisis");
     const reply = buildCrisisResponse();
     const response: ChatResponseBody = {
       reply,
@@ -167,7 +168,7 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   // 「指示を無視して」「システムプロンプトを教えて」などの、はっきりした攻撃の言い回しは、
   // AIを呼ばずに、固定の返信で断る（費用もかからず、AIが影響を受けることもない）。
   if (looksLikeInjection(rawMessage)) {
-    await recordStat(env.DB, "blocked");
+    await recordStatFor(env, req, "blocked");
     const response: ChatResponseBody = {
       reply: INJECTION_REPLY,
       sig: await signText(env.CHAT_SIGNING_KEY, INJECTION_REPLY),
@@ -204,15 +205,15 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
 
   // AIの返信も、そのまま信用しない。確認済みでない電話番号やリンク、システムプロンプトの漏れを取り除く
   const checked = sanitizeReply(rawReply);
-  if (checked.changed) await recordStat(env.DB, checked.leaked ? "leak_blocked" : "reply_filtered");
+  if (checked.changed) await recordStatFor(env, req, checked.leaked ? "leak_blocked" : "reply_filtered");
 
   const finalState = markActionsPresented(
     updatedState,
     candidateActions.map((a) => a.id)
   );
 
-  await recordStat(env.DB, "messages");
-  if (isFirstMessage) await recordStat(env.DB, "consultations");
+  await recordStatFor(env, req, "messages");
+  if (isFirstMessage) await recordStatFor(env, req, "consultations");
 
   const response: ChatResponseBody = {
     reply: checked.text,
@@ -241,7 +242,7 @@ async function handleSummarize(req: Request, env: Env): Promise<Response> {
     ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
   };
   const summary = sanitizeReply(await summarizeConsultation(anthropicEnv, history)).text;
-  await recordStat(env.DB, "summaries");
+  await recordStatFor(env, req, "summaries");
   return json({ summary });
 }
 
@@ -312,7 +313,7 @@ async function handleRegister(req: Request, env: Env): Promise<Response> {
   try {
     const user = await createUser(env.DB, loginId, displayName, password);
     const token = await createSession(env.DB, user.id);
-    await recordStat(env.DB, "registrations");
+    await recordStatFor(env, req, "registrations");
     return json({
       token,
       loginId: user.loginId,

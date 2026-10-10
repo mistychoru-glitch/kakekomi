@@ -10,18 +10,24 @@ const API_BASE =
 const STORAGE_KEY = "kakekomi_guest_session_v1";
 const ACCOUNT_KEY = "kakekomi_account_v1";
 const DEV_KEY_STORAGE = "kakekomi_dev_key";
+const TEST_KEY_STORAGE = "kakekomi_test_key";
 const MESSAGE_MAX = 2000;
 
-// 開発者本人の回数制限を外すための合言葉。ブラウザのコンソールで一度だけ
-// localStorage.setItem("kakekomi_dev_key", "（サーバー側で設定した合言葉）") を
-// 実行しておけば、このMacBookのこのブラウザでは以後ずっと無制限になる。
+// 開発者本人の動作確認用の印。ブラウザのコンソールで一度だけ実行しておくと、
+// このブラウザからの利用は、利用数の集計に入らなくなる（回数制限は外れない）。
+//   localStorage.setItem("kakekomi_test_key", "（サーバー側で設定した印の文字列）")
+// kakekomi_dev_key は、さらに回数制限も外す開発用の合言葉（通常は使わない）。
 function devHeaders() {
+  const headers = {};
   try {
-    const key = localStorage.getItem(DEV_KEY_STORAGE);
-    return key ? { "x-kakekomi-dev-key": key } : {};
+    const devKey = localStorage.getItem(DEV_KEY_STORAGE);
+    if (devKey) headers["x-kakekomi-dev-key"] = devKey;
+    const testKey = localStorage.getItem(TEST_KEY_STORAGE);
+    if (testKey) headers["x-kakekomi-test-key"] = testKey;
   } catch (e) {
-    return {};
+    // localStorageが使えない環境では、何も付けない
   }
+  return headers;
 }
 
 const messagesEl = document.getElementById("messages");

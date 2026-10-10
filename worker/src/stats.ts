@@ -1,5 +1,24 @@
 // 利用数の記録（日別の件数だけ）。会話の内容や、利用者を特定できる情報は記録しない。
 // 記録に失敗しても、相談そのものを止めない。
+//
+// 開発者自身の動作確認（テスト）は集計に入れない。実際の利用数を正しく数えるため。
+// STATS_EXCLUDE_KEY は「集計から除くだけ」の目印で、回数制限は外さない（DEV_BYPASS_KEY とは別物）。
+// 漏れても、集計が少し狂うだけで、費用や安全には影響しない。
+
+import { timingSafeEqualStrings } from "./auth.ts";
+import { isDevBypass, type RateLimitEnv } from "./rateLimit.ts";
+
+export const STATS_EXCLUDE_HEADER = "x-kakekomi-test-key";
+
+export interface StatsEnv extends RateLimitEnv {
+  STATS_EXCLUDE_KEY?: string;
+}
+
+export function isExcludedFromStats(env: StatsEnv, req: Request): boolean {
+  const key = env.STATS_EXCLUDE_KEY;
+  if (key && timingSafeEqualStrings(req.headers.get(STATS_EXCLUDE_HEADER) ?? "", key)) return true;
+  return isDevBypass(env, req);
+}
 
 export type StatMetric =
   | "consultations" // 新しい相談の開始（最初の1通）
@@ -32,4 +51,15 @@ export async function recordStat(
   } catch (e) {
     console.warn("failed to record stat", metric, e);
   }
+}
+
+// 開発者の動作確認なら記録しない。それ以外は recordStat と同じ。
+export async function recordStatFor(
+  env: StatsEnv,
+  req: Request,
+  metric: StatMetric,
+  now = Date.now()
+): Promise<void> {
+  if (isExcludedFromStats(env, req)) return;
+  await recordStat(env.DB, metric, now);
 }

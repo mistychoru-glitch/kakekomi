@@ -10,6 +10,9 @@ compatibility_date = "2025-09-01"
 #     好きな文字列を自分で決めてよい。設定後、ブラウザのコンソールで
 #     localStorage.setItem("kakekomi_dev_key", "設定した合言葉") を一度実行しておくと、
 #     そのブラウザは以後ずっと制限の対象外になる。
+#   wrangler secret put STATS_EXCLUDE_KEY ← 動作確認を、利用数の集計から除くための印（回数制限は外さない）。
+#     設定後、ブラウザのコンソールで localStorage.setItem("kakekomi_test_key", "設定した印") を
+#     一度実行しておくと、そのブラウザの利用は daily_stats に数えられなくなる。
 [vars]
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 # 全ユーザー合計の、1日あたりのAI利用回数の上限（料金の最終的な歯止め）。
