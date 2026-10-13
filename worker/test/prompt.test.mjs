@@ -14,3 +14,10 @@ test("候補アクションは、返信の本文で伝える（カードに任�
   const prompt = buildSystemPrompt(createInitialState(), []);
   assert.match(prompt, /先頭の1つを、返信の中で必ず自分の言葉で伝える/);
 });
+
+test("身近な人のための代理の相談も、範囲内として受け止める", () => {
+  const prompt = buildSystemPrompt(createInitialState(), []);
+  assert.match(prompt, /身近な人のお金の悩みを、心配して代わりに調べている人/);
+  assert.match(prompt, /「ご本人が直接\n相談してください」/);
+  assert.match(prompt, /あなたは大丈夫ですか」「ご自身のお金のことは？」と繰り返し聞かない/);
+});
