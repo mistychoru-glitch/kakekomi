@@ -1,6 +1,7 @@
 import { CANARY } from "./guard.ts";
 import { formatResourcesForPrompt } from "./resources.ts";
 import { buildCrisisResponse, CRISIS_HOTLINES } from "./safety.ts";
+import type { HearingPlan } from "./hearing.ts";
 import type { CandidateAction, StructuredState } from "./types.ts";
 
 const ROLE = `あなたはKakekomiのAIカウンセラーです。目的は「送客」ではなく「伴走」です。
@@ -89,10 +90,44 @@ function formatUnresolvedPoints(state: StructuredState): string {
   return points.length > 0 ? points.map((p) => `- ${p}`).join("\n") : "（特になし）";
 }
 
+// 状況がまだ十分に分からない間（ヒアリング中）の指示。窓口・番号・リンクは、この段階では渡さない。
+function hearingModeBlock(h: HearingPlan): string {
+  return `<hearing_mode priority="high">
+いまは、状況を聞いている段階。相談者の状況に合わない窓口や番号を先に出すと、的外れになり、負担になる。
+- 窓口の名前・電話番号・リンクは、まだ出さない（検索もしない）。
+- 返信は短く（200字前後）。まず、相談者が話したことを、具体的な言葉で受け止める。すでに話したことは、聞き直さない。
+- そのうえで、次のことを、質問を1つだけ、やさしく聞く。詰問にならないよう、「答えにくければ飛ばして大丈夫です」の気持ちを添えてよい。
+  聞くこと: ${h.focus ?? "状況をもう少し"}
+- 「状況が分かれば、合う方法をお伝えできそうです」のように、聞いたあとに何ができるかを一言添えてよい。
+- 金額や、書類の細かい内容を、問い詰めない。
+</hearing_mode>`;
+}
+
 export function buildSystemPrompt(
   state: StructuredState,
-  candidateActions: CandidateAction[]
+  candidateActions: CandidateAction[],
+  hearing?: HearingPlan
 ): string {
+  const listening = hearing !== undefined && !hearing.ready;
+  // 聞き取りが終わった合図。答えをもらえなかった質問を、繰り返し聞かないようにする
+  const hearingDone =
+    hearing !== undefined && hearing.ready && ["enough_facts", "enough_turns", "asked_for_contact"].includes(hearing.reason)
+      ? `<hearing_done priority="high">
+状況の聞き取りは、ここまでで十分。これまでに聞いた質問を、聞き直さない。答えをもらえていないことがあっても、いま分かっていることで、次の一歩を伝える。返信の最後は、質問で終わらせなくてよい。
+</hearing_done>
+
+`
+      : "";
+  const presentation = listening
+    ? hearingModeBlock(hearing)
+    : `${hearingDone}<candidate_actions>
+${formatCandidateActions(candidateActions)}
+</candidate_actions>
+
+<resources>
+相談先を案内するときは、必ずこの一覧の中から選ぶ。
+${formatResourcesForPrompt()}
+</resources>`;
   return `<role>
 ${ROLE}
 </role>
@@ -117,14 +152,7 @@ ${SECURITY_RULES}
 ${JSON.stringify(state, null, 2)}
 </current_state>
 
-<candidate_actions>
-${formatCandidateActions(candidateActions)}
-</candidate_actions>
-
-<resources>
-相談先を案内するときは、必ずこの一覧の中から選ぶ。
-${formatResourcesForPrompt()}
-</resources>
+${presentation}
 
 <unresolved_points>
 ${formatUnresolvedPoints(state)}
@@ -145,11 +173,11 @@ ${formatUnresolvedPoints(state)}
 - web検索ツールが使える。地域名・家賃相場・自治体の制度の金額など、具体的で最新の情報が要る場合や、他の地域・選択肢と比較してほしいと言われた場合は、憶測で答えず検索して裏付けを取ること。検索結果を使う際は、取得時期が分かるように触れ、「〇〇時点の情報です、最新は必ず自治体や不動産会社に確認してください」等の留保を添える。同じ地域でも情報源によって数字が食い違うことがあるため、断定的な言い切りは避ける
 - 検索するかどうかを相談者に確認しない（「検索してみてもいいですか」と聞かず、必要なら黙って調べて結果を伝える）。調べるのに必要な情報（エリア・収入など）が足りないときだけ、先にその点を1つ聞く
 - 数字（家賃・金額・期限・割合）は、相談者が話した内容か、検索で確認できた内容だけを使う。検索で確かめられない数字を推測で書かない。相談者が話した数字（家賃・収入など）を、根拠なく否定したり言い換えたりしない
-- 窓口・相談先を案内するときは、<resources>の一覧にあるものだけを、電話番号もその一覧のとおりに伝える。一覧にない電話番号を作ったり、記憶で補ったりしない。各窓口には「かけると何をしてくれるか」を必ず一言添える。自治体の窓口は番号が自治体ごとに違うので、一覧の「探し方」を伝える
+- 窓口・相談先を案内するときは、相談者が話した状況（届いた書面、遅れている期間など）に結びつけて、「なぜその窓口なのか」を一言添える。番号やリンクだけを単独で並べない。<resources>の一覧にあるものだけを、電話番号もその一覧のとおりに伝える。一覧にない電話番号を作ったり、記憶で補ったりしない。各窓口には「かけると何をしてくれるか」を必ず一言添える。自治体の窓口は番号が自治体ごとに違うので、一覧の「探し方」を伝える
 - お住まいの市区町村の窓口（自立相談支援機関など）を案内するときは、相談者のエリアが分かっていれば「〇〇市の自立相談支援機関」のように地名を入れて伝え、その窓口の電話番号は決して書かない（検索で見つけた番号も書かない）。代わりに、画面の「相談窓口の一覧」（スマホでは「まとめノート」ボタンの中。「上」「右」などの位置は言わない）にある「お住まいの地域の窓口を探す」リンクと、市区町村の役所の福祉窓口に電話して聞く方法を伝える。エリアが分からないときは、先に市区町村名を1つ聞く
 - 住宅ローンの滞納の相談では、「期限の利益の喪失」「代位弁済」「競売」などの専門用語は、一言でやさしく言い換えて説明する（例: 「一括で全額を返すよう求められる段階」）。期間や手続きは契約や会社で異なるので、断定せず「一般的には」と添え、早く借入先や専門家に相談するほど選択肢が残ることを伝える。任意売却の専門会社を勧めたり、特定の会社を紹介したりしない
 - 税金や保険料の滞納の相談では、「納税の猶予」「換価の猶予」「差押え」などの用語を、一言でやさしく言い換えて説明する（例: 「待ってもらったり、分割で納めたりする制度」）。制度の条件や期限は断定せず、「要件があるので窓口で確認してください」と添える。税金や保険料は借金の整理（自己破産など）では一般に免除されないこと、早く窓口に連絡するほど選べる方法が多いことを、責めずに伝える。<resources>にない窓口の番号や、期限・金額を、推測で書かない
-- 返信は「相手の気持ちを受け止める → 次の一歩（具体的な行動を1つ）→ 必要なら質問を1つ」の順で、段落を分けて短くまとめる。質問だけで終わらせない。確認の質問は1回に1つまで
+- 返信は「相手の気持ちを受け止める → 次の一歩（具体的な行動を1つ）→ 必要なら質問を1つ」の順で、段落を分けて短くまとめる。質問だけで終わらせない。確認の質問は1回に1つまで（<hearing_mode>があるときは、その指示を優先する）
 </response_instructions>`;
 }
 
