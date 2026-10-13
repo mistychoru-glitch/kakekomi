@@ -924,6 +924,11 @@ body {
   display: inline-block;
 }
 
+/* 説明の帯は、文の途中ではなく、文の切れ目で折り返す */
+.banner-sent {
+  display: inline-block;
+}
+
 /* linebreak.js が、途中で切りたくない言葉を包む。文字としての改行の規則（行頭に句読点を置かない等）は、そのまま効く */
 .lb {
   white-space: nowrap;

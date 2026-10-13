@@ -135,7 +135,7 @@ function renderWelcome() {
   wrap.className = "welcome";
   wrap.innerHTML = `
     <p class="welcome-lead">${phrases("誰にも言えない|お金の悩みが|できてしまった人へ。")}</p>
-    <p class="welcome-sub">${phrases("匿名・登録なしで、|状況を整理して、|今日の一歩と|電話の台本まで|一緒に作ります。")}<br>${phrases("うまく書けなくても大丈夫です。|思いつくままに書いてください。|下の例を選んで、|書き換えて送ることもできます。")}</p>
+    <p class="welcome-sub">${phrases("匿名・登録なしで、|状況を整理して、|今日の一歩と|電話の台本まで|一緒に作ります。")}<br>${phrases("うまく書けなくても大丈夫です。|思いつくままに書いてください。")}<br>${phrases("下の例を選んで、|書き換えて送ることもできます。")}</p>
   `;
   const list = document.createElement("div");
   list.className = "welcome-examples";
