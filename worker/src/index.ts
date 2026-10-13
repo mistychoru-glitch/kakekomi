@@ -2,7 +2,7 @@ import { extractStatePatch, generateReply, summarizeConsultation } from "./anthr
 import { buildSystemPrompt, buildCrisisResponse } from "./prompt";
 import { selectCandidateActions } from "./rules";
 import { planHearing } from "./hearing";
-import { topicNotesFor } from "./topics";
+import { topicNotesFor, wageGapNotes } from "./topics";
 import { recordStatFor } from "./stats";
 import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch, sanitizeClientState } from "./state";
@@ -222,9 +222,17 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   await recordStatFor(env, req, "messages");
   if (isFirstMessage) await recordStatFor(env, req, "consultations");
 
+  const finalReply =
+    checked.text + (topicNotes ? wageGapNotes(
+          [...history.filter((t) => t.role === "user").map((t) => t.content), rawMessage],
+          checked.text,
+          history.filter((t) => t.role === "assistant").map((t) => t.content)
+        )
+      : "");
+
   const response: ChatResponseBody = {
-    reply: checked.text,
-    sig: await signText(env.CHAT_SIGNING_KEY, checked.text),
+    reply: finalReply,
+    sig: await signText(env.CHAT_SIGNING_KEY, finalReply),
     state: finalState,
     candidateActions,
     safetyTriggered: false,

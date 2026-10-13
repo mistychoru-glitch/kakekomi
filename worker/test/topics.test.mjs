@@ -64,3 +64,29 @@ test("見通しの知識に、役員・執行役員の分かれ目と、退職�
   assert.match(notes, /概算を一緒に計算します/);
   assert.match(notes, /最初の一文で結論/);
 });
+
+import { wageGapNotes } from "../src/topics.ts";
+
+test("返信に抜けている大事な点だけを、固定の文で補う", () => {
+  const user = ["彼氏は執行役員で、6月から給料が未払い。従業員の給料を20万円立て替えた"];
+  const gap = wageGapNotes(user, "結論から言うと、ゼロとは限りません。");
+  assert.match(gap, /退職の時期/);
+  assert.match(gap, /立て替えたお金/);
+  assert.match(gap, /役員の場合/);
+});
+
+test("すでに書かれている点は、重ねて補わない", () => {
+  const user = ["執行役員で、6月から給料が未払い。立て替えた分もある"];
+  const reply = "退職日の6か月前からの分が対象です。立て替えた分は対象外です。登記簿を確認してください。";
+  assert.equal(wageGapNotes(user, reply), "");
+});
+
+test("給料の未払いの話題でなければ、何も補わない", () => {
+  assert.equal(wageGapNotes(["家賃を滞納しています。役員です"], "お話を聞かせてください"), "");
+});
+
+test("前の返信に書いてある点は、続く返信で重ねて補わない", () => {
+  const user = ["執行役員で、6月から給料が未払い。立て替えた分もある"];
+  const prior = ["退職日の6か月前からの分が対象です。立て替えた分は対象外です。登記簿を確認してください。"];
+  assert.equal(wageGapNotes(user, "続きの質問への答えです。", prior), "");
+});
