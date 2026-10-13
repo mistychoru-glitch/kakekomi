@@ -167,6 +167,40 @@ function renderWelcome() {
   messagesEl.appendChild(wrap);
 }
 
+// 1行ずつの要素にして、「・」や「①」で始まる行が折り返したとき、2行目以降を、文字の位置にそろえる。
+// 文字そのものは、textContent で入れる（HTMLとして解釈しない）。
+const LIST_LINE = /^(?:[・･•●■□◆◇▶▷]|[①-⑳]|[0-9０-９]{1,2}[.．)）、]|[-*] )/;
+// 最後の「、」「。」のあと（6〜16文字）の位置。見つからなければ 0。
+function lastClauseStart(line) {
+  if (line.length < 22) return 0;
+  const body = line.slice(0, -1); // 末尾の「。」は数えない
+  const idx = Math.max(body.lastIndexOf("、"), body.lastIndexOf("。"));
+  if (idx < 0) return 0;
+  const tailLen = line.length - (idx + 1);
+  return tailLen >= 6 && tailLen <= 16 ? idx + 1 : 0;
+}
+
+function fillMessage(div, text) {
+  for (const line of String(text).split("\n")) {
+    const row = document.createElement("div");
+    row.className = "msg-line";
+    if (LIST_LINE.test(line)) row.classList.add("msg-item");
+    // 段落の最後の行が、「ことですね。」だけのように短くならないよう、最後のひと区切り（読点より後ろ）を、
+    // 折り返さない塊にする。区切りがなければ、そのまま。
+    const cut = LIST_LINE.test(line) ? 0 : lastClauseStart(line);
+    if (cut > 0) {
+      row.appendChild(document.createTextNode(line.slice(0, cut)));
+      const tail = document.createElement("span");
+      tail.className = "lb";
+      tail.textContent = line.slice(cut);
+      row.appendChild(tail);
+    } else {
+      row.textContent = line;
+    }
+    div.appendChild(row);
+  }
+}
+
 function renderMessages() {
   messagesEl.innerHTML = "";
   // スマホでは、会話が始まったら説明バナーを隠して、会話の場所を広げる（CSS側で判定）
@@ -179,7 +213,7 @@ function renderMessages() {
   for (const turn of session.history) {
     const div = document.createElement("div");
     div.className = `msg ${turn.role}`;
-    div.textContent = turn.role === "assistant" ? restoreFromMap(turn.content, tokenMap) : turn.content;
+    fillMessage(div, turn.role === "assistant" ? restoreFromMap(turn.content, tokenMap) : turn.content);
     messagesEl.appendChild(div);
     if (turn.role === "user" && turn.masked && Object.keys(turn.masked).length > 0) {
       const note = document.createElement("div");

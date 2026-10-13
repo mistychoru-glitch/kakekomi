@@ -192,8 +192,20 @@ body {
 
 .msg.assistant {
   align-self: flex-start;
+  max-width: 94%;
   background: var(--bubble-assistant);
   border: 1px solid var(--border);
+}
+
+/* 1行ずつ。空の行も、1行ぶんの高さを保つ */
+.msg-line {
+  min-height: 1.6em;
+}
+
+/* 「・」「①」などで始まる行は、折り返した2行目以降を、文字の位置にそろえる */
+.msg-item {
+  padding-left: 1.2em;
+  text-indent: -1.2em;
 }
 
 .msg.typing {
@@ -946,7 +958,6 @@ body {
 }
 
 /* 最後の行が、1語だけで残らないようにする（対応しているブラウザだけ） */
-.msg,
 .modal p,
 .modal li,
 .resource-name,
