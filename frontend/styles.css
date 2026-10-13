@@ -924,6 +924,11 @@ body {
   display: inline-block;
 }
 
+/* linebreak.js が、途中で切りたくない言葉を包む。文字としての改行の規則（行頭に句読点を置かない等）は、そのまま効く */
+.lb {
+  white-space: nowrap;
+}
+
 /* 例文の、均等な2行にするための改行。広い画面では使わない */
 .soft-br {
   display: none;
@@ -932,6 +937,20 @@ body {
 /* 日本語を、単語の途中ではなく、文節で折り返す（対応しているブラウザだけ。AIの返信にも効く） */
 body {
   word-break: auto-phrase;
+  line-break: strict;
+}
+
+/* 最後の行が、1語だけで残らないようにする（対応しているブラウザだけ） */
+.msg,
+.modal p,
+.modal li,
+.resource-name,
+.resource-does,
+.resource-how,
+.resource-link,
+.notes-empty,
+.note-card p {
+  text-wrap: pretty;
 }
 
 /* 資金繰りチェック（経営者向け） */
