@@ -107,3 +107,15 @@ test("2通目でも、何も分からないままなら、もう1回だけ聞く
   const s = st({ category: "personal" }, { sub_category: ["debt"] });
   assert.equal(planHearing(s, 2, "はい").ready, false);
 });
+
+test("「どうなる？」「現実的には？」と聞かれたら、聞き取りより先に見通しを伝える", () => {
+  const s = st({ category: "personal" }, { sub_category: ["other"] });
+  for (const m of ["現実的にはどうなりますか", "お金は戻ってくる可能性はありますか", "この先どうなるんでしょうか"]) {
+    assert.equal(planHearing(s, 1, m).ready, true, m);
+  }
+});
+
+test("確かな一般知識がある話題（給料の未払い）は、すぐに伝える", () => {
+  const h = planHearing(st(), 1, "彼氏の給料が払われていません", true);
+  assert.equal(h.ready, true);
+});

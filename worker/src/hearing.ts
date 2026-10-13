@@ -20,7 +20,7 @@ const ENOUGH_FACTS_AFTER = 1;
 
 // 「窓口を教えて」「どこに電話すればいい？」など、相談先をはっきり求めている言い回し
 const CONTACT_REQUEST =
-  /(窓口|電話番号|連絡先|相談先|番号).{0,10}(教え|知りたい|どこ)|どこに(連絡|電話|相談|行け|かけ)|どこへ(連絡|電話|相談)|どこで相談|誰に(相談|連絡|電話)/;
+  /(窓口|電話番号|連絡先|相談先|番号).{0,10}(教え|知りたい|どこ)|どこに(連絡|電話|相談|行け|かけ)|どこへ(連絡|電話|相談)|どこで相談|誰に(相談|連絡|電話)|どうなる|どうなっ|どうなり|現実的|見通し|可能性|取り戻せ|戻ってくる|戻る(の|可能)/;
 
 function isKnown(v: unknown): boolean {
   if (v === null || v === undefined) return false;
@@ -106,12 +106,15 @@ function hearingFields(s: StructuredState): Field[] {
 export function planHearing(
   state: StructuredState,
   userTurns: number,
-  latestUserMessage: string
+  latestUserMessage: string,
+  topicNotesAvailable = false
 ): HearingPlan {
   if (state.presented_actions.length > 0) {
     return { ready: true, reason: "already_presented", focus: null };
   }
   if (isUrgent(state)) return { ready: true, reason: "urgent", focus: null };
+  // 確かな一般知識がある話題（給料の未払いなど）は、状況の聞き取りより先に、見通しを伝える
+  if (topicNotesAvailable) return { ready: true, reason: "asked_for_contact", focus: null };
   if (CONTACT_REQUEST.test(latestUserMessage)) return { ready: true, reason: "asked_for_contact", focus: null };
   if (userTurns >= MAX_LISTENING_USER_TURNS) {
     return { ready: true, reason: "enough_turns", focus: null };

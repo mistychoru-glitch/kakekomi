@@ -125,6 +125,32 @@ export const RESOURCES: Resource[] = [
     howToFind: "「（市区町村名） 商工会議所」または「（都道府県名） よろず支援拠点」で検索する。",
   },
   {
+    id: "roudou-hotline",
+    name: "労働条件相談ほっとライン（厚生労働省）",
+    phone: "0120-811-610",
+    hours: "月〜金 17:00〜22:00 / 土・日・祝日 9:00〜21:00（12月29日〜1月3日を除く、通話無料・匿名可）",
+    forWhom: "給料の未払い、残業代、解雇など、働き方のルールで困っている人（本人以外の家族・恋人からの相談も可）",
+    whatTheyDo:
+      "法令や裁判例をふまえた情報提供と、状況に合う窓口の紹介をしてくれる。労働基準監督署への相談の前に、状況を整理するのにも使える。",
+    link: {
+      label: "厚生労働省「労働条件相談ほっとライン」",
+      url: "https://www.check-roudou.mhlw.go.jp/lp/hotline/",
+    },
+  },
+  {
+    id: "miharai-tatekae",
+    name: "未払賃金立替払制度（最寄りの労働基準監督署・労働者健康安全機構の相談コーナー）",
+    forWhom: "勤め先が倒産して、給料が払われないまま退職した人",
+    whatTheyDo:
+      "未払いの給料の一部を、国が立て替えて払ってくれる制度。要件と、請求の期限がある。",
+    howToFind:
+      "最寄りの労働基準監督署、または労働者健康安全機構の「未払賃金立替払相談コーナー」に聞く。",
+    link: {
+      label: "厚生労働省「未払賃金立替払制度」",
+      url: "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/roudoukijun/shinsai_rousaihoshouseido/tatekae/index.html",
+    },
+  },
+  {
     id: "yorisoi",
     name: "よりそいホットライン",
     phone: "0120-279-338",

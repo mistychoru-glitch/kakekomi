@@ -2,6 +2,7 @@ import { extractStatePatch, generateReply, summarizeConsultation } from "./anthr
 import { buildSystemPrompt, buildCrisisResponse } from "./prompt";
 import { selectCandidateActions } from "./rules";
 import { planHearing } from "./hearing";
+import { topicNotesFor } from "./topics";
 import { recordStatFor } from "./stats";
 import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch, sanitizeClientState } from "./state";
@@ -200,11 +201,13 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   // 5章: 優先順位付けロジック（コード側のルールエンジン）
   // ヒアリングが足りない間は、窓口や次の一歩を出さず、状況を聞く（的外れな連絡先で負担をかけない）
   const userTurns = history.filter((t) => t.role === "user").length + 1;
-  const hearing = planHearing(updatedState, userTurns, rawMessage);
-  const candidateActions = hearing.ready ? selectCandidateActions(updatedState) : [];
+  const topicNotes = topicNotesFor([...history.filter((t) => t.role === "user").map((t) => t.content), rawMessage]);
+  const hearing = planHearing(updatedState, userTurns, rawMessage, topicNotes !== "");
+  // 給料の未払いの話題では、経営者向けなど、関係のない次の一歩のカードを出さない（窓口は本文で伝える）
+  const candidateActions = hearing.ready && topicNotes === "" ? selectCandidateActions(updatedState) : [];
 
   // 7章: システムプロンプトを動的に組み立てて応答生成
-  const systemPrompt = buildSystemPrompt(updatedState, candidateActions, hearing);
+  const systemPrompt = buildSystemPrompt(updatedState, candidateActions, hearing, topicNotes);
   const rawReply = await generateReply(anthropicEnv, systemPrompt, history, message);
 
   // AIの返信も、そのまま信用しない。確認済みでない電話番号やリンク、システムプロンプトの漏れを取り除く

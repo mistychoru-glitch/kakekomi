@@ -1,0 +1,66 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { topicNotesFor } from "../src/topics.ts";
+import { buildSystemPrompt } from "../src/prompt.ts";
+import { createInitialState } from "../src/types.ts";
+import { planHearing } from "../src/hearing.ts";
+import { ALLOWED_PHONES } from "../src/guard.ts";
+
+test("給料の未払いの言い回しを検出する", () => {
+  for (const m of [
+    "彼氏の給料が払われていません",
+    "給与が2ヶ月支払われていない",
+    "バイト代が出ない",
+    "未払いの給料について",
+    "残業代が未払いです",
+  ]) {
+    assert.match(topicNotesFor([m]), /wage_arrears/, m);
+  }
+});
+
+test("関係のない話題では、何も加えない", () => {
+  assert.equal(topicNotesFor(["家賃を滞納しています"]), "");
+  assert.equal(topicNotesFor(["給料日前でお金がありません"]), "");
+});
+
+test("前の発言で話題が分かっていれば、続く質問でも加える", () => {
+  assert.match(topicNotesFor(["彼氏の給料が払われていません", "どうなりますか"]), /wage_arrears/);
+});
+
+test("見通しの知識は、プロンプトに入り、聞き取り中は入らない", () => {
+  const s = createInitialState();
+  const ready = planHearing(s, 1, "給料が払われない", true);
+  const withNotes = buildSystemPrompt(s, [], ready, topicNotesFor(["給料が払われない"]));
+  assert.match(withNotes, /<topic_notes topic="wage_arrears">/);
+  assert.match(withNotes, /原則3回以内/);
+  const listening = planHearing(s, 1, "お金のことで困っています", false);
+  assert.equal(listening.ready, false);
+  assert.doesNotMatch(buildSystemPrompt(s, [], listening, topicNotesFor(["お金のことで困っています"])), /<topic_notes topic=/);
+});
+
+test("労働の相談窓口の番号は、案内してよい番号に入っている", () => {
+  assert.ok(ALLOWED_PHONES.has("0120811610"));
+});
+
+test("倒産と給料の組み合わせ・役員の相談も、見通しの知識を加える", () => {
+  for (const m of [
+    "会社が倒産したら、6月から未払いの給料は支払われなくなりますか",
+    "彼氏は会社の執行役員で、給料が払われていません。会社が潰れそうです",
+    "会社が破産したら未払いの報酬はどうなる",
+  ]) {
+    assert.match(topicNotesFor([m]), /wage_arrears/, m);
+  }
+});
+
+test("見通しの知識に、役員・執行役員の分かれ目と、退職の時期の注意が入っている", () => {
+  const notes = topicNotesFor(["給料が払われない"]);
+  assert.match(notes, /【役員・執行役員の場合】/);
+  assert.match(notes, /肩書きでなく、実態で判断/);
+  assert.match(notes, /上限296万円/);
+  assert.match(notes, /上限176万円/);
+  assert.match(notes, /上限88万円/);
+  assert.match(notes, /立て替えた経費/);
+  assert.match(notes, /退職の時期に注意/);
+  assert.match(notes, /概算を一緒に計算します/);
+  assert.match(notes, /最初の一文で結論/);
+});
