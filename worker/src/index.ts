@@ -2,7 +2,7 @@ import { extractStatePatch, generateReply, summarizeConsultation } from "./anthr
 import { buildSystemPrompt, buildCrisisResponse } from "./prompt";
 import { selectCandidateActions } from "./rules";
 import { planHearing } from "./hearing";
-import { topicNotesFor, wageGapNotes } from "./topics";
+import { scrubWageTimingClaims, topicNotesFor, wageGapNotes } from "./topics";
 import { recordStatFor } from "./stats";
 import { detectCrisis } from "./safety";
 import { markActionsPresented, mergeStatePatch, sanitizeClientState } from "./state";
@@ -223,9 +223,10 @@ async function handleChat(req: Request, env: Env): Promise<Response> {
   if (isFirstMessage) await recordStatFor(env, req, "consultations");
 
   const finalReply =
-    checked.text + (topicNotes ? wageGapNotes(
+    (topicNotes ? scrubWageTimingClaims(checked.text) : checked.text) +
+    (topicNotes ? wageGapNotes(
           [...history.filter((t) => t.role === "user").map((t) => t.content), rawMessage],
-          checked.text,
+          scrubWageTimingClaims(checked.text),
           history.filter((t) => t.role === "assistant").map((t) => t.content)
         )
       : "");

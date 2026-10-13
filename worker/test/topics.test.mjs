@@ -66,7 +66,7 @@ test("見通しの知識に、役員・執行役員の分かれ目と、退職�
   assert.match(notes, /最初の一文で結論/);
 });
 
-import { wageGapNotes } from "../src/topics.ts";
+import { scrubWageTimingClaims, wageGapNotes } from "../src/topics.ts";
 
 test("返信に抜けている大事な点だけを、固定の文で補う", () => {
   const user = ["彼氏は執行役員で、6月から給料が未払い。従業員の給料を20万円立て替えた"];
@@ -92,6 +92,29 @@ test("給料の未払いの話題でなければ、何も補わない", () => {
 
 test("前の返信に書いてある点は、続く返信で重ねて補わない", () => {
   const user = ["執行役員で、6月から給料が未払い。立て替えた分もある"];
-  const prior = ["立て替えた分は対象外です。登記簿を確認してください。\n・退職の時期：退職日が遅くなるほど、対象の範囲は後ろにずれます。"];
+  const prior = ["立て替えた分は対象外です。登記簿を確認してください。\n・退職の時期：退職日が遅くなるほど、対象の範囲は後ろにずれます（退職を遅らせて、対象が広がることはありません）。"];
   assert.equal(wageGapNotes(user, "続きの質問への答えです。", prior), "");
+});
+
+test("本番で出た、退職時期の誤った例を取り除く（遅らせると広がる／1月退職で多く対象）", () => {
+  const bad =
+    "退職日が遅くなるほど、対象の範囲は後ろにずれます。例えば、12月に退職すれば、6月ごろ以降の分が対象に入りますが、1月に退職すれば、古い月からより多く対象になるかもしれません。確認してください。";
+  const out = scrubWageTimingClaims(bad);
+  assert.doesNotMatch(out, /1月に退職/);
+  assert.doesNotMatch(out, /12月に退職/);
+  assert.match(out, /退職日が遅くなるほど/);
+  assert.match(out, /確認してください/);
+
+  const bad2 = "退職時期を後ろにずらすことで、対象期間を広げられる可能性もあります。証拠を残してください。";
+  assert.doesNotMatch(scrubWageTimingClaims(bad2), /広げられる/);
+  assert.match(scrubWageTimingClaims(bad2), /証拠を残してください/);
+
+  const bad3 = "今はまだ退職しないで、会社がどう進むかを見守りましょう。証拠を集めてください。";
+  assert.doesNotMatch(scrubWageTimingClaims(bad3), /退職しないで/);
+});
+
+test("固定の文は、AIが似た言い回しを書いても、そのまま補う（固定の文そのものが無いときは必ず）", () => {
+  const user = ["6月から給料が未払い"];
+  const reply = "退職日が遅くなるほど、対象の範囲は後ろにずれます。";
+  assert.match(wageGapNotes(user, reply), /退職を遅らせて、対象が広がることはありません/);
 });

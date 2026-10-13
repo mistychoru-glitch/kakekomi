@@ -85,7 +85,7 @@ export function wageGapNotes(userTexts: string[], reply: string, priorReplies: s
   if (!WAGE_ARREARS.test(user)) return "";
   const said = [reply, ...priorReplies].join("\n");
   const notes: string[] = [];
-  if (!said.includes("退職日が遅くなるほど")) notes.push(TIMING_NOTE);
+  if (!said.includes("退職を遅らせて、対象が広がることはありません")) notes.push(TIMING_NOTE);
   if (/(立て?替|建て?替|肩代わり)/.test(user) && !/対象外/.test(said)) {
     notes.push(
       "・立て替えたお金：給料ではないので、立替払制度の対象外です。一般の債権として扱われ、会社に財産が乏しいと、戻りにくいことが多いです。"
@@ -98,4 +98,22 @@ export function wageGapNotes(userTexts: string[], reply: string, priorReplies: s
   }
   if (notes.length === 0) return "";
   return "\n\n【大事な点（補足）】\n" + notes.join("\n");
+}
+
+// AIが、退職の時期について、間違えやすい例や助言を書いたとき、その文だけを取り除く。
+// 取り除く対象: 「◯月に退職すれば…」という例、退職を遅らせると有利・広がるという趣旨、様子を見る助言。
+const RISKY_TIMING_SENTENCE = new RegExp(
+  [
+    "[0-9０-９]{1,2}月(ごろ|頃|中|末|初め)?に退職",
+    "退職.{0,40}(遅ら|ずら|後ろに|待て|待つ|待った).{0,40}(広が|広げ|有利|多く|増え|残)",
+    "(広が|広げ|有利|多く対象|増え).{0,30}退職",
+    "(今は|まだ)退職(せず|しないで|しない)",
+    "(様子を見|見守り).{0,30}退職|退職.{0,30}(様子を見|見守り)",
+  ].join("|")
+);
+
+export function scrubWageTimingClaims(reply: string): string {
+  const parts = reply.split(/(?<=。)/);
+  const kept = parts.filter((sent) => !RISKY_TIMING_SENTENCE.test(sent));
+  return kept.join("").replace(/\n{3,}/g, "\n\n").trim();
 }
