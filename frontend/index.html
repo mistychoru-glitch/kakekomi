@@ -13,7 +13,7 @@
 <meta property="og:image" content="https://kakekomi-worker.misty-choru.workers.dev/ogp.png" />
 <meta property="og:locale" content="ja_JP" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="theme-color" content="#faf7f2" />
+<meta name="theme-color" content="#ffffff" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -21,12 +21,13 @@
   <header class="app-header">
     <div class="app-header-row">
       <div>
-        <h1>Kakekomi</h1>
+        <h1><button type="button" id="home-logo" class="home-logo" title="最初の画面に戻る"><img src="logo.png" alt="Kakekomi（お金の駆け込み寺）" width="480" height="120" class="home-logo-img" /></button></h1>
         <p>お金のことを、一人で抱え込まなくていい場所</p>
       </div>
       <div class="header-actions">
         <div id="account-area" class="account-area"></div>
         <button id="notes-open" type="button" class="new-session-btn notes-open-btn" aria-expanded="false" aria-controls="note-panel">まとめノート</button>
+        <button id="terms-open-header" type="button" class="new-session-btn">利用規約</button>
         <button id="export-note" type="button" class="new-session-btn">相談内容を保存する</button>
         <button id="new-session" type="button" class="new-session-btn">新しい相談を始める</button>
       </div>
@@ -256,10 +257,13 @@
   <div class="modal">
     <h3>ご利用にあたって</h3>
     <ul class="terms-list">
-      <li>Kakekomiは、お金の悩みを整理するためのAIです。<strong>法律・税務・医療などの専門的な助言ではなく</strong>、回答に誤りが含まれることがあります。制度や金額は、必ず自治体や専門家に確認してください。</li>
-      <li>入力した内容は、回答を作るために<strong>AI事業者（Anthropic社）のサービスへ送信</strong>されます。氏名・住所・口座番号など、個人を特定できる情報は入力しないでください。電話番号・メールアドレス・口座番号・マイナンバーなどに見える部分は、<strong>AIに送る前に、自動で伏せます</strong>（画面には、そのまま残ります）。ただし、完全ではありません。</li>
-      <li>相談内容はKakekomiのサーバーには<strong>保存されません</strong>。このブラウザの中にだけ残り、「新しい相談を始める」やブラウザのデータ削除で消えます。</li>
-      <li>命の危険を感じるほどつらいときは、<strong>よりそいホットライン 0120-279-338</strong>（24時間・無料・匿名）に電話してください。</li>
+      <li>Kakekomiは、お金の悩みを整理するためのAIです。<br>
+        <strong>法律・税務・医療などの専門的な助言ではなく</strong>、回答に誤りが含まれることがあります。制度や金額は、必ず自治体や専門家に確認してください。</li>
+      <li>入力した内容は、回答を作るために<strong>AI事業者（Anthropic社）のサービスへ送信</strong>されます。<br>
+        氏名・住所・口座番号など、個人を特定できる情報は、入力しないでください。電話番号・メールアドレス・口座番号・マイナンバーなどに見える部分は、<strong>AIに送る前に、自動で伏せます</strong>（画面には、そのまま残ります）。ただし、完全ではありません。</li>
+      <li>相談内容はKakekomiのサーバーには<strong>保存されません</strong>。<br>
+        このブラウザの中にだけ残り、「新しい相談を始める」やブラウザのデータ削除で消えます。</li>
+      <li>命の危険を感じるほどつらいときは、<strong class="nb">よりそいホットライン 0120-279-338</strong>（24時間・無料・匿名）に電話してください。</li>
     </ul>
     <div class="modal-actions">
       <button type="button" class="modal-primary" id="terms-accept">理解して始める</button>

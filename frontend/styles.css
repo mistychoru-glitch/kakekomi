@@ -1,14 +1,15 @@
 :root {
   color-scheme: light;
-  --bg: #faf7f2;
+  /* ロゴ（白地に深い緑）に合わせた、白ベースの配色。背景は、ほんのり冷たいグレーで区切る */
+  --bg: #f4f6f5;
   --panel: #ffffff;
-  --ink: #2b2620;
-  --muted: #7a7268;
-  --accent: #b5793c;
-  --accent-soft: #f3e3cf;
-  --bubble-user: #e9e2d8;
-  --bubble-assistant: #fff9f0;
-  --border: #e4dccb;
+  --ink: #1f2a24;
+  --muted: #66716b;
+  --accent: #0b4530;
+  --accent-soft: #e6efe9;
+  --bubble-user: #e6ece8;
+  --bubble-assistant: #ffffff;
+  --border: #dde4df;
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
@@ -50,6 +51,29 @@ body {
 .app-header h1 {
   margin: 0 0 4px;
   font-size: 1.6rem;
+}
+
+.home-logo {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.home-logo-img {
+  display: block;
+  width: 240px;
+  height: auto;
+}
+
+.home-logo:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 .header-actions {
@@ -252,6 +276,11 @@ body {
   line-height: 1.5;
   overflow-y: auto;
 }
+.composer textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 
 .composer button {
   border: none;
@@ -301,13 +330,27 @@ body {
 .terms-list {
   margin: 0 0 8px;
   padding-left: 1.2em;
+  /* 文章が長いときは、この中だけスクロールして、「理解して始める」を常に見えるようにする */
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 4px;
   font-size: 0.88rem;
   line-height: 1.7;
   color: var(--ink);
 }
 
 .terms-list li {
-  margin-bottom: 8px;
+  margin-bottom: 14px;
+  line-height: 1.8;
+}
+
+/* 電話番号は、途中で折り返さない */
+.terms-list .nb {
+  white-space: nowrap;
+}
+
+.terms-list li:last-child {
+  margin-bottom: 0;
 }
 
 .note-panel h2 {
@@ -342,7 +385,7 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(43, 38, 32, 0.45);
+  background: rgba(10, 30, 22, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -694,6 +737,10 @@ body {
 
   .app-header h1 {
     font-size: 1.3rem;
+  }
+
+  .home-logo-img {
+    width: 180px;
   }
 
   .app-header p {

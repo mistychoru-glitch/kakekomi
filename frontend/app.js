@@ -527,6 +527,8 @@ document.getElementById("terms-accept").addEventListener("click", () => {
 });
 
 document.getElementById("open-terms").addEventListener("click", () => openModal("terms-modal"));
+// ヘッダーの「利用規約」ボタン：初回に表示されたのと同じ利用規約の画面を開く
+document.getElementById("terms-open-header").addEventListener("click", () => openModal("terms-modal"));
 
 if (!termsAccepted()) openModal("terms-modal");
 
@@ -740,6 +742,24 @@ newSessionButton.addEventListener("click", () => {
     )
   ) {
     resetSession();
+  }
+});
+
+// ---- ロゴを押すと、最初の画面に戻る ----
+// 会話がある場合は、「新しい相談を始める」と同じ確認を出してから戻る（消えるため）。
+document.getElementById("home-logo").addEventListener("click", () => {
+  setNotesOpen(false);
+  if (session.history.length === 0) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  if (
+    confirm(
+      "今の相談内容を消して、最初の画面に戻りますか？この操作は取り消せません。残しておきたい場合は先に「相談内容を保存する」を使ってください。"
+    )
+  ) {
+    resetSession();
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 });
 
